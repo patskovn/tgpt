@@ -2,6 +2,7 @@ use ratatui::prelude::Color;
 use ratatui::prelude::Modifier;
 use ratatui::prelude::Style;
 use ratatui::widgets::Block;
+use ratatui::widgets::BorderType;
 use ratatui::widgets::Borders;
 use std::fmt;
 use tui_textarea::{CursorMove, Input, Key, Scrolling, TextArea};
@@ -17,13 +18,16 @@ pub enum Mode {
 impl Mode {
     pub fn block<'a>(&self) -> Block<'a> {
         let help = match self {
-            Self::Normal => "type q to quit, type i to enter insert mode",
+            Self::Normal => "type q to hide, type i to enter insert mode",
             Self::Insert => "type Esc to back to normal mode",
             Self::Visual => "type y to yank, type d to delete, type Esc to back to normal mode",
             Self::Operator(_) => "move cursor to apply operator",
         };
-        let title = format!("{} MODE ({})", self, help);
-        Block::default().borders(Borders::ALL).title(title)
+        let title = format!("{} ({})", self, help);
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .title(title)
     }
 
     pub fn cursor_style(&self) -> Style {

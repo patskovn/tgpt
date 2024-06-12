@@ -9,11 +9,12 @@ use crate::tca::Effect;
 #[derive(Debug)]
 pub enum Action {
     Event(Event),
-    Delegated(DelegatedAction),
+    Delegated(Delegated),
 }
 
 #[derive(Debug)]
-pub enum DelegatedAction {
+pub enum Delegated {
+    Noop(Event),
     Quit,
 }
 
@@ -40,18 +41,17 @@ impl<'a> Default for State<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct TextFieldReducer {}
-impl TextFieldReducer {
-    pub fn new() -> Self {
-        TextFieldReducer {}
-    }
-}
 
 impl tca::Reducer<State<'_>, Action> for TextFieldReducer {
     fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Event(event) => {
-                match state.editor.transition(event.into(), &mut state.textarea) {
+                match state
+                    .editor
+                    .transition(event.clone().into(), &mut state.textarea)
+                {
                     Transition::Mode(mode) if state.editor.mode != mode => {
                         state.textarea.set_block(mode.block());
                         state.textarea.set_cursor_style(mode.cursor_style());
@@ -59,19 +59,16 @@ impl tca::Reducer<State<'_>, Action> for TextFieldReducer {
 
                         Effect::none()
                     }
-                    Transition::Nop | Transition::Mode(_) => Effect::none(),
+                    Transition::Nop => Effect::send(Action::Delegated(Delegated::Noop(event))),
+                    Transition::Mode(_) => Effect::none(),
                     Transition::Pending(input) => {
                         state.editor = state.editor.clone().with_pending(input);
                         Effect::none()
                     }
-                    Transition::Quit => Effect::send(Action::Delegated(DelegatedAction::Quit)),
+                    Transition::Quit => Effect::send(Action::Delegated(Delegated::Quit)),
                 }
             }
             Action::Delegated(_) => Effect::none(),
         }
     }
-}
-
-impl<'a> State<'a> {
-    fn transition(&mut self, event: Event) {}
 }
