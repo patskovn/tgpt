@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    widgets::Paragraph,
+    widgets::{block::Title, Paragraph},
     Frame,
 };
 
@@ -73,7 +73,12 @@ impl tca::Reducer<State<'_>, Action> for ChatReducer {
 }
 
 pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
-    let navigation = navigation::ui(navigation::CurrentScreen::Chat);
+    let mut navigation = navigation::ui(navigation::CurrentScreen::Chat);
+    if !state.text_focused {
+        navigation = navigation.title(
+            Title::from("[c] Show field").position(ratatui::widgets::block::Position::Bottom),
+        );
+    }
     let body = if state.text_focused {
         let layout = Layout::default()
             .direction(ratatui::layout::Direction::Vertical)

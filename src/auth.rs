@@ -1,17 +1,25 @@
+use std::default;
+
 use crossterm::event::Event;
-use ratatui::{
-    layout::{Constraint, Layout},
-    widgets::{Block, Paragraph},
-    Frame,
-};
+use ratatui::{layout::Rect, Frame};
 
 use crate::{
-    navigation,
+    gpt, list, navigation,
     tca::{Effect, Reducer},
 };
 
-#[derive(Debug, Default)]
-pub struct State {}
+#[derive(Debug)]
+pub struct State {
+    providers: list::State<gpt::Provider>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            providers: list::State::new(vec![gpt::Provider::OpenAI]),
+        }
+    }
+}
 
 impl State {
     pub fn new() -> Self {
@@ -26,6 +34,7 @@ impl State {
 #[derive(Debug)]
 pub enum Action {
     Event(Event),
+    List(list::Action),
     Delegated(Delegated),
 }
 
@@ -39,20 +48,24 @@ pub struct AuthReducer {}
 impl Reducer<State, Action> for AuthReducer {
     fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
+            Action::List(list::Action::Delegated(delegated)) => match delegated {
+                list::Delegated::Noop(e) => Effect::send(Action::Delegated(Delegated::Noop(e))),
+                list::Delegated::Enter(_) => Effect::none(),
+                list::Delegated::Toogle(_) => Effect::none(),
+            },
+            Action::List(action) => list::ListFeature::default()
+                .reduce(&mut state.providers, action)
+                .map(Action::List),
             Action::Delegated(_) => Effect::none(),
-            Action::Event(e) => Effect::send(Action::Delegated(Delegated::Noop(e))),
+            Action::Event(e) => Effect::send(Action::List(list::Action::Event(e))),
         }
     }
 }
 
-pub fn ui(frame: &mut Frame, state: &State) {
+pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
     let navigation = navigation::ui(navigation::CurrentScreen::Config);
-    let layout = Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
-        .constraints(vec![Constraint::Fill(1), Constraint::Max(10)])
-        .split(frame.size());
-
-    frame.render_widget(Paragraph::new("Config").block(navigation), layout[0]);
+    list::ui(frame, navigation.inner(area), &state.providers);
+    frame.render_widget(navigation, area);
 }
 
 #[derive(Debug)]

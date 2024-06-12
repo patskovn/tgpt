@@ -1,6 +1,8 @@
 mod auth;
 mod chat;
 mod editor;
+mod gpt;
+mod list;
 mod navigation;
 mod tca;
 mod textfield;
@@ -100,7 +102,7 @@ type AppStore<'a> = tca::Store<AppFeature, State<'a>, AppAction>;
 fn ui(frame: &mut Frame, store: &AppStore) {
     store.with_state(|state| match state.navigation.current_screen {
         CurrentScreen::Chat => chat::ui(frame, frame.size(), &state.chat),
-        CurrentScreen::Config => auth::ui(frame, &state.auth),
+        CurrentScreen::Config => auth::ui(frame, frame.size(), &state.auth),
     })
 }
 

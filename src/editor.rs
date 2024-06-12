@@ -1,6 +1,7 @@
 use ratatui::prelude::Color;
 use ratatui::prelude::Modifier;
 use ratatui::prelude::Style;
+use ratatui::widgets::block::Title;
 use ratatui::widgets::Block;
 use ratatui::widgets::BorderType;
 use ratatui::widgets::Borders;
@@ -18,7 +19,7 @@ pub enum Mode {
 impl Mode {
     pub fn block<'a>(&self) -> Block<'a> {
         let help = match self {
-            Self::Normal => "type q to hide, type i to enter insert mode",
+            Self::Normal => "type i to enter insert mode",
             Self::Insert => "type Esc to back to normal mode",
             Self::Visual => "type y to yank, type d to delete, type Esc to back to normal mode",
             Self::Operator(_) => "move cursor to apply operator",
@@ -28,6 +29,9 @@ impl Mode {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .title(title)
+            .title(
+                Title::from("[q] Hide field").position(ratatui::widgets::block::Position::Bottom),
+            )
     }
 
     pub fn cursor_style(&self) -> Style {
