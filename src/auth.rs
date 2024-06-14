@@ -7,14 +7,14 @@ use crate::{
     tca::{Effect, Reducer},
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State<'a> {
     providers: list::State<gpt::Provider>,
 
     configuration: Option<Configuration<'a>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 enum Configuration<'a> {
     ChatGPT(chat_gpt_configuration::State<'a>),
 }

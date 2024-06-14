@@ -13,7 +13,7 @@ use crate::{
     tca::{self, Effect},
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State<T>
 where
     T: for<'a> Into<ListItem<'a>>,

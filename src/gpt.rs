@@ -8,7 +8,7 @@ pub enum Provider {
     OpenAI,
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct ChatGPTConfiguration {
     pub api_key: String,
 }

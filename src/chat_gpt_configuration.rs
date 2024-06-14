@@ -12,7 +12,7 @@ use crate::{
     uiutils::{centered_constraint, centered_pct},
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct State<'a> {
     api_key: single_line_input::State<'a>,
 }

@@ -12,6 +12,7 @@ mod textfield;
 mod uiutils;
 
 use crate::navigation::CurrentScreen;
+use futures::stream::StreamExt;
 use std::fs::File;
 use std::io::{self};
 
@@ -21,12 +22,13 @@ use crossterm::{
     event::{self},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures::FutureExt;
 use ratatui::Frame;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use simplelog::{CombinedLogger, WriteLogger};
 use tca::Effect;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct State<'a> {
     pub navigation: navigation::State,
     pub chat: chat_loader::State<'a>,
@@ -131,17 +133,39 @@ async fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
 
+    let (state_change_sender, mut state_change_observer) = tokio::sync::mpsc::channel::<()>(2);
+    let mut terminal_events = crossterm::event::EventStream::new();
+
     let reducer = AppFeature::default();
-    let mut store = AppStore::new(State::default(), reducer);
+    let mut store = AppStore::new(State::default(), state_change_sender, reducer);
     store.send(AppAction::Navigation(navigation::Action::Delegated(
         navigation::DelegatedAction::ChangeScreen(CurrentScreen::Chat),
     )));
+    terminal.draw(|f| ui(f, &store))?;
 
     loop {
-        terminal.draw(|f| ui(f, &store))?;
+        let crossterm_event = terminal_events.next().fuse();
+        tokio::select! {
+            Some(()) = state_change_observer.recv() => {
+                terminal.draw(|f| ui(f, &store))?;
+            }
+            maybe_event = crossterm_event => {
+                match maybe_event {
+                  Some(Ok(evt)) => {
+                    store.send(AppAction::Event(evt));
+                    terminal.draw(|f| ui(f, &store))?;
+                  }
+                  Some(Err(_)) => {
+                    break;
+                  }
+                  None => {
+                    continue;
+                  },
+                }
+          },
 
-        let event = event::read()?;
-        store.send(AppAction::Event(event));
+        }
+
         if store.quit {
             break;
         }

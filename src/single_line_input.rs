@@ -7,7 +7,7 @@ use crate::{
     textfield,
 };
 
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub struct State<'a> {
     pub textarea: textfield::State<'a>,
 }

@@ -3,20 +3,13 @@ where
     R: Reducer<State, Action>,
     Action: std::fmt::Debug,
     State: Eq,
+    State: Clone,
 {
     state: State,
     reducer: R,
+    redraw: tokio::sync::mpsc::Sender<()>,
     phantom: std::marker::PhantomData<Action>,
     pub quit: bool,
-}
-
-macro_rules! extract {
-    ($e:expr, $p:path) => {
-        match $e {
-            $p(value) => Some(value),
-            _ => None,
-        }
-    };
 }
 
 impl<R, State, Action> Store<R, State, Action>
@@ -24,18 +17,24 @@ where
     R: Reducer<State, Action>,
     Action: std::fmt::Debug,
     State: Eq,
+    State: Clone,
 {
-    pub fn new(state: State, reducer: R) -> Self {
+    pub fn new(state: State, redraw: tokio::sync::mpsc::Sender<()>, reducer: R) -> Self {
         Self {
             state,
             reducer,
+            redraw,
             phantom: std::marker::PhantomData,
             quit: false,
         }
     }
 
     pub fn send(&mut self, action: Action) {
+        let state_before = self.state.clone();
         self.handle(Effect::send(action));
+        if state_before != self.state {
+            _ = self.redraw.try_send(());
+        }
     }
 
     fn handle(&mut self, effect: Effect<Action>) {
@@ -79,7 +78,9 @@ where
     Action: std::fmt::Debug,
     ParentAction: std::fmt::Debug,
     State: Eq,
+    State: Clone,
     ParentState: Eq,
+    ParentState: Clone,
 {
     _base: R,
     _parent: Option<ParentR>,
@@ -98,7 +99,9 @@ where
     Action: std::fmt::Debug,
     ParentAction: std::fmt::Debug,
     State: Eq,
+    State: Clone,
     ParentState: Eq,
+    ParentState: Clone,
 {
     pub fn scope<ChildReducer, ChildState, ChildAction, FState, FAction>(
         self,
@@ -112,6 +115,7 @@ where
         ChildReducer: Reducer<ChildState, ChildAction>,
         ChildAction: std::fmt::Debug,
         ChildState: Eq,
+        ChildState: Clone,
     {
         ReducerConfiguration {
             _base: reducer,
