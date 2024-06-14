@@ -6,33 +6,45 @@ use ratatui::{
 };
 
 use crate::{
+    gpt::ChatGPTConfiguration,
     navigation,
     tca::{self, Effect},
     textfield,
 };
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct State<'a> {
     textarea: textfield::State<'a>,
     text_focused: bool,
+    config: ChatGPTConfiguration,
+}
+
+impl State<'_> {
+    pub fn new(config: ChatGPTConfiguration) -> Self {
+        Self {
+            textarea: textfield::State::default(),
+            text_focused: true,
+            config,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum Action {
     Event(Event),
     TextField(textfield::Action),
-    Delegated(DelegatedAction),
+    Delegated(Delegated),
 }
 
 #[derive(Debug)]
-pub enum DelegatedAction {
+pub enum Delegated {
     Noop(Event),
 }
 
 #[derive(Default)]
-pub struct ChatReducer {}
+pub struct Feature {}
 
-impl tca::Reducer<State<'_>, Action> for ChatReducer {
+impl tca::Reducer<State<'_>, Action> for Feature {
     fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
@@ -42,7 +54,7 @@ impl tca::Reducer<State<'_>, Action> for ChatReducer {
                     Effect::none()
                 }
                 textfield::Delegated::Noop(e) => {
-                    Effect::send(Action::Delegated(DelegatedAction::Noop(e)))
+                    Effect::send(Action::Delegated(Delegated::Noop(e)))
                 }
                 textfield::Delegated::Updated => Effect::none(),
             },
@@ -62,10 +74,10 @@ impl tca::Reducer<State<'_>, Action> for ChatReducer {
                                     state.text_focused = true;
                                     Effect::none()
                                 }
-                                _ => Effect::send(Action::Delegated(DelegatedAction::Noop(e))),
+                                _ => Effect::send(Action::Delegated(Delegated::Noop(e))),
                             }
                         }
-                        _ => Effect::send(Action::Delegated(DelegatedAction::Noop(e))),
+                        _ => Effect::send(Action::Delegated(Delegated::Noop(e))),
                     }
                 }
             }
@@ -92,5 +104,8 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
         area
     };
 
-    frame.render_widget(Paragraph::new("Hello, world!").block(navigation), body);
+    frame.render_widget(
+        Paragraph::new(state.config.api_key.clone()).block(navigation),
+        body,
+    );
 }

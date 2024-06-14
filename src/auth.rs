@@ -65,9 +65,9 @@ impl Reducer<State<'_>, Action> for AuthReducer {
                     chat_gpt_configuration::Delegated::Noop(e) => {
                         Effect::send(Action::Delegated(Delegated::Noop(e)))
                     }
-                    chat_gpt_configuration::Delegated::Finished(_config) => {
+                    chat_gpt_configuration::Delegated::Finished(config) => {
                         state.configuration = None;
-                        // TODO: Save config
+                        config.save().unwrap();
 
                         Effect::none()
                     }

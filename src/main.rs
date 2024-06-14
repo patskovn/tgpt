@@ -1,6 +1,7 @@
 mod auth;
 mod chat;
 mod chat_gpt_configuration;
+mod chat_loader;
 mod editor;
 mod gpt;
 mod list;
@@ -27,7 +28,7 @@ use tca::Effect;
 
 pub struct State<'a> {
     pub navigation: navigation::State,
-    pub chat: chat::State<'a>,
+    pub chat: chat_loader::State<'a>,
     pub auth: auth::State<'a>,
 }
 
@@ -35,7 +36,7 @@ impl<'a> Default for State<'a> {
     fn default() -> Self {
         Self {
             navigation: navigation::State::default(),
-            chat: chat::State::default(),
+            chat: chat_loader::State::default(),
             auth: auth::State::new(),
         }
     }
@@ -44,7 +45,7 @@ impl<'a> Default for State<'a> {
 #[derive(Debug)]
 enum AppAction {
     Event(Event),
-    Chat(chat::Action),
+    Chat(chat_loader::Action),
     Config(auth::Action),
     Navigation(navigation::Action),
 }
@@ -59,7 +60,7 @@ impl AppFeature {
 impl tca::Reducer<State<'_>, AppAction> for AppFeature {
     fn reduce(&self, state: &mut State, action: AppAction) -> Effect<AppAction> {
         match action {
-            AppAction::Chat(chat::Action::Delegated(chat::DelegatedAction::Noop(e)))
+            AppAction::Chat(chat_loader::Action::Delegated(chat_loader::Delegated::Noop(e)))
             | AppAction::Config(auth::Action::Delegated(auth::Delegated::Noop(e))) => {
                 navigation::NavigationReducer::default()
                     .reduce(&mut state.navigation, navigation::Action::Event(e))
@@ -68,14 +69,14 @@ impl tca::Reducer<State<'_>, AppAction> for AppFeature {
             AppAction::Config(action) => auth::AuthReducer::default()
                 .reduce(&mut state.auth, action)
                 .map(AppAction::Config),
-            AppAction::Chat(action) => chat::ChatReducer::default()
+            AppAction::Chat(action) => chat_loader::Feature::default()
                 .reduce(&mut state.chat, action)
                 .map(AppAction::Chat),
             AppAction::Event(e) => match e {
                 Event::Key(key) if key.kind != event::KeyEventKind::Release => {
                     match state.navigation.current_screen {
                         CurrentScreen::Chat => {
-                            Effect::send(AppAction::Chat(chat::Action::Event(e)))
+                            Effect::send(AppAction::Chat(chat_loader::Action::Event(e)))
                         }
                         CurrentScreen::Config => {
                             Effect::send(AppAction::Config(auth::Action::Event(e)))
@@ -89,7 +90,12 @@ impl tca::Reducer<State<'_>, AppAction> for AppFeature {
                     navigation::DelegatedAction::Noop(_) => Effect::none(),
                     navigation::DelegatedAction::ChangeScreen(screen) => {
                         state.navigation.current_screen = screen;
-                        Effect::none()
+                        match screen {
+                            CurrentScreen::Chat => {
+                                Effect::send(AppAction::Chat(chat_loader::Action::ReloadConfig))
+                            }
+                            CurrentScreen::Config => Effect::none(),
+                        }
                     }
                     navigation::DelegatedAction::Exit => Effect::quit(),
                 },
@@ -103,7 +109,7 @@ type AppStore<'a> = tca::Store<AppFeature, State<'a>, AppAction>;
 
 fn ui(frame: &mut Frame, store: &AppStore) {
     store.with_state(|state| match state.navigation.current_screen {
-        CurrentScreen::Chat => chat::ui(frame, frame.size(), &state.chat),
+        CurrentScreen::Chat => chat_loader::ui(frame, frame.size(), &state.chat),
         CurrentScreen::Config => auth::ui(frame, frame.size(), &state.auth),
     })
 }
@@ -125,6 +131,9 @@ pub(crate) fn main() -> anyhow::Result<()> {
 
     let reducer = AppFeature::default();
     let mut store = AppStore::new(State::default(), reducer);
+    store.send(AppAction::Navigation(navigation::Action::Delegated(
+        navigation::DelegatedAction::ChangeScreen(CurrentScreen::Chat),
+    )));
 
     loop {
         terminal.draw(|f| ui(f, &store))?;

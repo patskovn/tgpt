@@ -8,9 +8,12 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.82"
 crossterm = "0.27.0"
+dirs = "5.0.1"
 log = "0.4.21"
 ratatui = "0.26.1"
+rs_openai = "0.4.1"
 serde = { version = "1.0.198", features = ["derive"] }
+serde_derive = "1.0.203"
 serde_json = "1.0.116"
 simplelog = "0.12.2"
 trace = "0.1.7"
