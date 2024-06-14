@@ -60,30 +60,22 @@ impl fmt::Display for Mode {
 pub enum Transition {
     Nop,
     Mode(Mode),
-    Pending(Input),
     Quit,
 }
 
 // State of Vim emulation
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Vim {
     pub mode: Mode,
-    pub pending: Input, // Pending input to handle a sequence with two keys like gg
 }
 
 impl Vim {
     pub fn new(mode: Mode) -> Self {
-        Self {
-            mode,
-            pending: Input::default(),
-        }
+        Self { mode }
     }
 
     pub fn with_pending(self, pending: Input) -> Self {
-        Self {
-            mode: self.mode,
-            pending,
-        }
+        Self { mode: self.mode }
     }
 
     pub fn transition(&self, input: Input, textarea: &mut TextArea<'_>) -> Transition {

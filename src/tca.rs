@@ -2,6 +2,7 @@ pub struct Store<R, State, Action>
 where
     R: Reducer<State, Action>,
     Action: std::fmt::Debug,
+    State: Eq,
 {
     state: State,
     reducer: R,
@@ -22,6 +23,7 @@ impl<R, State, Action> Store<R, State, Action>
 where
     R: Reducer<State, Action>,
     Action: std::fmt::Debug,
+    State: Eq,
 {
     pub fn new(state: State, reducer: R) -> Self {
         Self {
@@ -76,6 +78,8 @@ where
     ParentR: Reducer<ParentState, ParentAction>,
     Action: std::fmt::Debug,
     ParentAction: std::fmt::Debug,
+    State: Eq,
+    ParentState: Eq,
 {
     _base: R,
     _parent: Option<ParentR>,
@@ -93,6 +97,8 @@ where
     ParentR: Reducer<ParentState, ParentAction>,
     Action: std::fmt::Debug,
     ParentAction: std::fmt::Debug,
+    State: Eq,
+    ParentState: Eq,
 {
     pub fn scope<ChildReducer, ChildState, ChildAction, FState, FAction>(
         self,
@@ -105,6 +111,7 @@ where
         FAction: Fn(&Action) -> ChildAction,
         ChildReducer: Reducer<ChildState, ChildAction>,
         ChildAction: std::fmt::Debug,
+        ChildState: Eq,
     {
         ReducerConfiguration {
             _base: reducer,

@@ -11,7 +11,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 
 use crate::tca::{self, Effect};
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub enum CurrentScreen {
     #[default]
     Chat,
@@ -38,7 +38,7 @@ impl TryFrom<KeyCode> for CurrentScreen {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct State {
     pub current_screen: CurrentScreen,
 }

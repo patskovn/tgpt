@@ -1596,6 +1596,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "simplelog",
+ "tokio",
  "trace",
  "tui-textarea",
 ]

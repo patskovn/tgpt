@@ -12,7 +12,7 @@ use crate::{
     textfield,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct State<'a> {
     textarea: textfield::State<'a>,
     text_focused: bool,

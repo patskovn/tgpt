@@ -13,11 +13,12 @@ use crate::{
     tca::{self, Effect},
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct State<T>
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
+    T: Eq,
 {
     list_state: ListState,
     pub items: Vec<T>,
@@ -27,6 +28,7 @@ impl<T> State<T>
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
+    T: Eq,
 {
     pub fn new(items: Vec<T>) -> Self {
         State {
@@ -40,6 +42,7 @@ pub fn ui<T>(frame: &mut Frame, area: Rect, state: &State<T>)
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
+    T: Eq,
 {
     let items: Vec<ListItem> = state.items.iter().map(|i| i.clone().into()).collect();
     let list = List::new(items)
@@ -81,6 +84,7 @@ impl<T> tca::Reducer<State<T>, Action> for ListFeature
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
+    T: Eq,
 {
     fn reduce(&self, state: &mut State<T>, action: Action) -> tca::Effect<Action> {
         match action {

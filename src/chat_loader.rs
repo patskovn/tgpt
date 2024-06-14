@@ -6,7 +6,7 @@ use crate::{
     tca::{self, Effect},
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub enum State<'a> {
     #[default]
     None,

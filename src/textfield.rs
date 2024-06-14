@@ -27,6 +27,14 @@ pub struct State<'a> {
     block: Option<Block<'a>>,
 }
 
+impl PartialEq for State<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        let areas_eq = self.textarea.lines() == other.textarea.lines();
+        self.editor == other.editor && self.block == other.block && areas_eq
+    }
+}
+impl Eq for State<'_> {}
+
 impl<'a> State<'a> {
     pub fn widget(&'a self) -> impl Widget + 'a {
         self.textarea.widget()
@@ -82,11 +90,6 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                         Effect::send(Action::Delegated(Delegated::Updated))
                     }
                     Transition::Mode(_) => Effect::none(),
-                    Transition::Pending(input) => {
-                        state.editor = state.editor.clone().with_pending(input);
-                        debug!("Pending");
-                        Effect::none()
-                    }
                     Transition::Quit => Effect::send(Action::Delegated(Delegated::Quit)),
                 }
             }

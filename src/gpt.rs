@@ -1,14 +1,14 @@
 use core::fmt;
 use dirs::home_dir;
 use serde::{Deserialize, Serialize};
-use std::{fs::create_dir_all, path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     OpenAI,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ChatGPTConfiguration {
     pub api_key: String,
 }

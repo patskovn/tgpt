@@ -26,6 +26,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use simplelog::{CombinedLogger, WriteLogger};
 use tca::Effect;
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct State<'a> {
     pub navigation: navigation::State,
     pub chat: chat_loader::State<'a>,
@@ -114,7 +115,8 @@ fn ui(frame: &mut Frame, store: &AppStore) {
     })
 }
 
-pub(crate) fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     CombinedLogger::init(vec![WriteLogger::new(
         log::LevelFilter::Debug,
         simplelog::Config::default(),
