@@ -20,7 +20,7 @@ where
     T: Clone,
 {
     list_state: ListState,
-    items: Vec<T>,
+    pub items: Vec<T>,
 }
 
 impl<T> State<T>

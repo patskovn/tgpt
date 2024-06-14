@@ -8,7 +8,7 @@ use ratatui::{
 use crate::{
     navigation,
     tca::{self, Effect},
-    textfield::{self, TextFieldReducer},
+    textfield,
 };
 
 #[derive(Default)]
@@ -44,8 +44,9 @@ impl tca::Reducer<State<'_>, Action> for ChatReducer {
                 textfield::Delegated::Noop(e) => {
                     Effect::send(Action::Delegated(DelegatedAction::Noop(e)))
                 }
+                textfield::Delegated::Updated => Effect::none(),
             },
-            Action::TextField(action) => TextFieldReducer::default()
+            Action::TextField(action) => textfield::Feature::default()
                 .reduce(&mut state.textarea, action)
                 .map(Action::TextField),
             Action::Event(e) => {

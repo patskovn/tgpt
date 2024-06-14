@@ -1,9 +1,11 @@
 mod auth;
 mod chat;
+mod chat_gpt_configuration;
 mod editor;
 mod gpt;
 mod list;
 mod navigation;
+mod single_line_input;
 mod tca;
 mod textfield;
 mod uiutils;
@@ -26,7 +28,7 @@ use tca::Effect;
 pub struct State<'a> {
     pub navigation: navigation::State,
     pub chat: chat::State<'a>,
-    pub auth: auth::State,
+    pub auth: auth::State<'a>,
 }
 
 impl<'a> Default for State<'a> {

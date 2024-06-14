@@ -65,7 +65,7 @@ pub enum Transition {
 }
 
 // State of Vim emulation
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Vim {
     pub mode: Mode,
     pub pending: Input, // Pending input to handle a sequence with two keys like gg
@@ -282,19 +282,13 @@ impl Vim {
                         return Transition::Mode(Mode::Normal);
                     }
                     Input {
-                        key: Key::Char('g'),
+                        key: Key::Char(op @ 'g'),
                         ctrl: false,
                         ..
-                    } if matches!(
-                        self.pending,
-                        Input {
-                            key: Key::Char('g'),
-                            ctrl: false,
-                            ..
+                    } => {
+                        if self.mode == Mode::Normal {
+                            return Transition::Mode(Mode::Operator(op));
                         }
-                    ) =>
-                    {
-                        textarea.move_cursor(CursorMove::Top)
                     }
                     Input {
                         key: Key::Char('G'),
@@ -347,7 +341,7 @@ impl Vim {
                         textarea.cut();
                         return Transition::Mode(Mode::Insert);
                     }
-                    input => return Transition::Pending(input),
+                    _ => return Transition::Nop,
                 }
 
                 // Handle the pending operator
@@ -363,6 +357,10 @@ impl Vim {
                     Mode::Operator('c') => {
                         textarea.cut();
                         Transition::Mode(Mode::Insert)
+                    }
+                    Mode::Operator('g') => {
+                        textarea.move_cursor(CursorMove::Top);
+                        Transition::Mode(Mode::Normal)
                     }
                     _ => Transition::Nop,
                 }
