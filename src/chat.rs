@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crossterm::event::{self, Event, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
@@ -33,6 +35,7 @@ impl State<'_> {
 pub enum Action {
     Event(Event),
     TextField(textfield::Action),
+    SendChatMessage,
     Delegated(Delegated),
 }
 
@@ -45,7 +48,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::TextField(textfield::Action::Delegated(delegated)) => match delegated {
@@ -57,7 +60,17 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     Effect::send(Action::Delegated(Delegated::Noop(e)))
                 }
                 textfield::Delegated::Updated => Effect::none(),
+                textfield::Delegated::Commit => Effect::run(|send| {
+                    Box::pin(async move {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        send.async_send(Action::SendChatMessage).await;
+                    })
+                }),
             },
+            Action::SendChatMessage => {
+                state.config.api_key = "Updated".to_string();
+                Effect::none()
+            }
             Action::TextField(action) => textfield::Feature::default()
                 .reduce(&mut state.textarea, action)
                 .map(Action::TextField),

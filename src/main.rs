@@ -61,7 +61,7 @@ impl AppFeature {
 }
 
 impl tca::Reducer<State<'_>, AppAction> for AppFeature {
-    fn reduce(&self, state: &mut State, action: AppAction) -> Effect<AppAction> {
+    fn reduce<'effect>(&self, state: &mut State, action: AppAction) -> Effect<'effect, AppAction> {
         match action {
             AppAction::Chat(chat_loader::Action::Delegated(chat_loader::Delegated::Noop(e)))
             | AppAction::Config(auth::Action::Delegated(auth::Delegated::Noop(e))) => {
@@ -108,7 +108,7 @@ impl tca::Reducer<State<'_>, AppAction> for AppFeature {
     }
 }
 
-type AppStore<'a> = tca::Store<AppFeature, State<'a>, AppAction>;
+type AppStore<'a> = tca::Store<'a, AppFeature, State<'a>, AppAction>;
 
 fn ui(frame: &mut Frame, store: &AppStore) {
     store.with_state(|state| match state.navigation.current_screen {
@@ -153,14 +153,8 @@ async fn main() -> anyhow::Result<()> {
                 match maybe_event {
                   Some(Ok(evt)) => {
                     store.send(AppAction::Event(evt));
-                    terminal.draw(|f| ui(f, &store))?;
                   }
-                  Some(Err(_)) => {
-                    break;
-                  }
-                  None => {
-                    continue;
-                  },
+                  _ => { continue }
                 }
           },
 

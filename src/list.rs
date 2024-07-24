@@ -86,7 +86,7 @@ where
     T: Clone,
     T: Eq,
 {
-    fn reduce(&self, state: &mut State<T>, action: Action) -> tca::Effect<Action> {
+    fn reduce<'effect>(&self, state: &mut State<T>, action: Action) -> Effect<'effect, Action> {
         match action {
             Action::Event(e) => match e {
                 Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {

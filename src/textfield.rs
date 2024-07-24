@@ -1,5 +1,4 @@
 use crossterm::event::Event;
-use log::{debug, warn};
 use ratatui::widgets::{Block, Widget};
 use tui_textarea::TextArea;
 
@@ -16,6 +15,7 @@ pub enum Action {
 #[derive(Debug)]
 pub enum Delegated {
     Noop(Event),
+    Commit,
     Updated,
     Quit,
 }
@@ -69,7 +69,7 @@ impl<'a> Default for State<'a> {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
         match action {
             Action::Event(event) => {
                 match state
@@ -85,7 +85,15 @@ impl tca::Reducer<State<'_>, Action> for Feature {
 
                         Effect::none()
                     }
-                    Transition::Nop => Effect::send(Action::Delegated(Delegated::Noop(event))),
+                    Transition::Nop => match event {
+                        Event::Key(key) => match key.code {
+                            crossterm::event::KeyCode::Enter => {
+                                Effect::send(Action::Delegated(Delegated::Commit))
+                            }
+                            _ => Effect::send(Action::Delegated(Delegated::Noop(event))),
+                        },
+                        _ => Effect::send(Action::Delegated(Delegated::Noop(event))),
+                    },
                     Transition::Mode(Mode::Insert) => {
                         Effect::send(Action::Delegated(Delegated::Updated))
                     }

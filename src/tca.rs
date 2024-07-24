@@ -1,23 +1,31 @@
-pub struct Store<R, State, Action>
+use async_trait::async_trait;
+use futures::future::BoxFuture;
+use std::fmt::Debug;
+use tokio::runtime::Runtime;
+
+pub struct Store<'store, R, State, Action>
 where
-    R: Reducer<State, Action>,
-    Action: std::fmt::Debug,
-    State: Eq,
-    State: Clone,
+    R: Reducer<State, Action> + std::marker::Sync,
+    Action: std::fmt::Debug + std::marker::Sync + std::marker::Send,
+    State: Eq + Clone + std::marker::Sync,
 {
     state: State,
     reducer: R,
     redraw: tokio::sync::mpsc::Sender<()>,
-    phantom: std::marker::PhantomData<Action>,
+    phantom: std::marker::PhantomData<&'store Action>,
     pub quit: bool,
 }
 
-impl<R, State, Action> Store<R, State, Action>
+#[async_trait]
+pub trait AsyncActionSender<Action>: std::marker::Sync + std::marker::Send {
+    async fn async_send(&self, action: Action);
+}
+
+impl<'store, R, State, Action> Store<'store, R, State, Action>
 where
-    R: Reducer<State, Action>,
-    Action: std::fmt::Debug,
-    State: Eq,
-    State: Clone,
+    R: Reducer<State, Action> + std::marker::Sync,
+    Action: std::fmt::Debug + std::marker::Sync + std::marker::Send,
+    State: Eq + Clone + std::marker::Sync,
 {
     pub fn new(state: State, redraw: tokio::sync::mpsc::Sender<()>, reducer: R) -> Self {
         Self {
@@ -37,7 +45,7 @@ where
         }
     }
 
-    fn handle(&mut self, effect: Effect<Action>) {
+    fn handle<'a>(&'a mut self, effect: Effect<'a, Action>) {
         log::debug!("Handling {:#?}", effect.value);
         match effect.value {
             EffectValue::None => {}
@@ -47,6 +55,15 @@ where
             }
             EffectValue::Quit => {
                 self.quit = true;
+            }
+            EffectValue::Async(job) => {
+                let self_ref: &Self = self;
+                let fut = job(Box::new(self_ref));
+                let rt = Runtime::new().unwrap();
+                rt.block_on(fut);
+
+                // let s: &Self = self;
+                // job(Box::new(s))
             }
         }
     }
@@ -59,13 +76,27 @@ where
     }
 }
 
-pub trait Reducer<State, Action: std::fmt::Debug> {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action>;
+#[async_trait]
+impl<'store, R, State, Action> AsyncActionSender<Action> for &Store<'store, R, State, Action>
+where
+    R: Reducer<State, Action> + std::marker::Sync,
+    Action: std::fmt::Debug + std::marker::Sync + std::marker::Send,
+    State: Eq + Clone + std::marker::Sync,
+{
+    async fn async_send(&self, _action: Action) {
+        println!("Hello");
+    }
+}
+
+pub trait Reducer<State, Action: std::fmt::Debug + std::marker::Sync + std::marker::Send> {
+    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action>;
 }
 
 pub struct EmptyReducer {}
-impl<State, Action: std::fmt::Debug> Reducer<State, Action> for EmptyReducer {
-    fn reduce(&self, _state: &mut State, _action: Action) -> Effect<Action> {
+impl<State, Action: std::fmt::Debug + std::marker::Sync + std::marker::Send> Reducer<State, Action>
+    for EmptyReducer
+{
+    fn reduce<'effect>(&self, _state: &mut State, _action: Action) -> Effect<'effect, Action> {
         Effect::none()
     }
 }
@@ -75,8 +106,8 @@ struct ReducerConfiguration<R, State, Action, ParentR, ParentState, ParentAction
 where
     R: Reducer<State, Action>,
     ParentR: Reducer<ParentState, ParentAction>,
-    Action: std::fmt::Debug,
-    ParentAction: std::fmt::Debug,
+    Action: std::fmt::Debug + std::marker::Sync + std::marker::Send,
+    ParentAction: std::fmt::Debug + std::marker::Sync + std::marker::Send,
     State: Eq,
     State: Clone,
     ParentState: Eq,
@@ -96,8 +127,8 @@ impl<R, State, Action, ParentR, ParentState, ParentAction>
 where
     R: Reducer<State, Action>,
     ParentR: Reducer<ParentState, ParentAction>,
-    Action: std::fmt::Debug,
-    ParentAction: std::fmt::Debug,
+    Action: std::fmt::Debug + std::marker::Sync + std::marker::Send,
+    ParentAction: std::fmt::Debug + std::marker::Sync + std::marker::Send,
     State: Eq,
     State: Clone,
     ParentState: Eq,
@@ -113,7 +144,7 @@ where
         FState: Fn(&State) -> &ChildState,
         FAction: Fn(&Action) -> ChildAction,
         ChildReducer: Reducer<ChildState, ChildAction>,
-        ChildAction: std::fmt::Debug,
+        ChildAction: std::fmt::Debug + std::marker::Sync + std::marker::Send,
         ChildState: Eq,
         ChildState: Clone,
     {
@@ -128,26 +159,112 @@ where
     }
 }
 
-pub struct Effect<Action: std::fmt::Debug> {
-    value: EffectValue<Action>,
+pub struct Effect<
+    'effect,
+    Action: std::fmt::Debug + std::marker::Send + std::marker::Sync + 'effect,
+> {
+    value: EffectValue<'effect, Action>,
 }
 
-#[derive(Debug)]
-enum EffectValue<Action: std::fmt::Debug> {
+enum EffectValue<'effect, Action>
+where
+    Action: std::fmt::Debug,
+{
     None,
     Send(Action),
+    Async(
+        Box<
+            dyn FnOnce(Box<dyn AsyncActionSender<Action> + 'effect>) -> BoxFuture<'effect, ()>
+                + 'effect
+                + std::marker::Send,
+        >,
+    ),
     Quit,
 }
 
-impl<Action: std::fmt::Debug> Effect<Action> {
-    pub fn map<F, MappedAction: std::fmt::Debug>(self, map: F) -> Effect<MappedAction>
+impl<Action> Debug for EffectValue<'_, Action>
+where
+    Action: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::Send(action) => f.write_str(&format!("Send {:#?}", action)),
+            Self::Async(_) => f.write_str("Async"),
+            Self::Quit => f.write_str("Quit"),
+        }
+    }
+}
+
+struct ActionMapper<'a, Action, MappedAction, F>
+where
+    Action: std::fmt::Debug + std::marker::Send + std::marker::Sync,
+    MappedAction: std::fmt::Debug + std::marker::Send,
+    F: Fn(Action) -> MappedAction + std::marker::Sync + std::marker::Send,
+{
+    parent: Box<dyn AsyncActionSender<MappedAction> + 'a>,
+    map: F,
+    phantom: std::marker::PhantomData<Action>,
+}
+
+impl<'a, Action, MappedAction, F> ActionMapper<'a, Action, MappedAction, F>
+where
+    Action: std::fmt::Debug + std::marker::Send + std::marker::Sync,
+    MappedAction: std::fmt::Debug + std::marker::Send,
+    F: Fn(Action) -> MappedAction + std::marker::Sync + std::marker::Send,
+{
+    fn new(parent: Box<dyn AsyncActionSender<MappedAction> + 'a>, map: F) -> Self {
+        Self {
+            parent,
+            map,
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+#[async_trait]
+impl<'a, Action, MappedAction, F> AsyncActionSender<Action>
+    for ActionMapper<'a, Action, MappedAction, F>
+where
+    Action: std::fmt::Debug + std::marker::Send + std::marker::Sync,
+    MappedAction: std::fmt::Debug + std::marker::Send,
+    F: Fn(Action) -> MappedAction + std::marker::Sync + std::marker::Send,
+{
+    async fn async_send(&self, action: Action) {
+        let mapped = (self.map)(action);
+        self.parent.async_send(mapped).await;
+    }
+}
+
+impl<'effect, Action: std::fmt::Debug + std::marker::Send + std::marker::Sync + 'effect>
+    Effect<'effect, Action>
+{
+    pub fn map<F, MappedAction: std::fmt::Debug + std::marker::Send + std::marker::Sync + 'effect>(
+        self,
+        map: F,
+    ) -> Effect<'effect, MappedAction>
     where
-        F: FnOnce(Action) -> MappedAction,
+        F: Fn(Action) -> MappedAction + std::marker::Send + std::marker::Sync + 'effect,
     {
         match self.value {
             EffectValue::None => Effect::none(),
             EffectValue::Quit => Effect::quit(),
             EffectValue::Send(a) => Effect::send(map(a)),
+            EffectValue::Async(a) => Effect::run(|sender| {
+                let mapper = ActionMapper::new(sender, map);
+                Box::pin(async move { a(Box::new(mapper)).await })
+            }),
+        }
+    }
+
+    pub fn run<T>(job: T) -> Self
+    where
+        T: FnOnce(Box<dyn AsyncActionSender<Action> + 'effect>) -> BoxFuture<'effect, ()>
+            + 'effect
+            + std::marker::Send,
+    {
+        Self {
+            value: EffectValue::Async(Box::new(job)),
         }
     }
 

@@ -74,10 +74,6 @@ impl Vim {
         Self { mode }
     }
 
-    pub fn with_pending(self, pending: Input) -> Self {
-        Self { mode: self.mode }
-    }
-
     pub fn transition(&self, input: Input, textarea: &mut TextArea<'_>) -> Transition {
         if input.key == Key::Null {
             return Transition::Nop;

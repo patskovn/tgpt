@@ -1,5 +1,4 @@
-use crossterm::event::{Event, KeyCode};
-use log::debug;
+use crossterm::event::Event;
 use ratatui::{layout::Rect, widgets::Block, Frame};
 
 use crate::{
@@ -38,7 +37,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::TextField(textfield::Action::Delegated(delegated)) => match delegated {
@@ -53,13 +52,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     Effect::none()
                 }
                 textfield::Delegated::Quit => Effect::send(Action::Delegated(Delegated::Exit)),
-                textfield::Delegated::Noop(e) => match e {
-                    Event::Key(key) => match key.code {
-                        KeyCode::Enter => Effect::send(Action::Delegated(Delegated::Enter)),
-                        _ => Effect::send(Action::Delegated(Delegated::Noop(e))),
-                    },
-                    _ => Effect::send(Action::Delegated(Delegated::Noop(e))),
-                },
+                textfield::Delegated::Commit => Effect::send(Action::Delegated(Delegated::Enter)),
+                textfield::Delegated::Noop(e) => {
+                    Effect::send(Action::Delegated(Delegated::Noop(e)))
+                }
             },
             Action::TextField(action) => textfield::Feature::default()
                 .reduce(&mut state.textarea, action)

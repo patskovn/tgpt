@@ -1,5 +1,4 @@
 use crossterm::event::Event;
-use log::debug;
 use ratatui::{layout::Rect, Frame};
 
 use crate::{
@@ -54,7 +53,7 @@ pub enum Delegated {
 #[derive(Default)]
 pub struct AuthReducer {}
 impl Reducer<State<'_>, Action> for AuthReducer {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
         match action {
             Action::ChatGPTConfig(chat_gpt_configuration::Action::Delegated(delegated)) => {
                 match delegated {

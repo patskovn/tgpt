@@ -51,7 +51,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> tca::Effect<Action> {
+    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::Event(e) => Effect::send(Action::Input(single_line_input::Action::Event(e))),
