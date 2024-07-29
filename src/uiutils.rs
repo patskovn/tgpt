@@ -1,18 +1,5 @@
 use ratatui::layout::{Constraint, Layout, Rect};
 
-/// # Usage
-///
-/// ```rust
-/// let rect = centered_rect(f.size(), 50, 50);
-/// ```
-pub fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
-    centered_pct(
-        centered_pct(r, ratatui::layout::Direction::Vertical, percent_x),
-        ratatui::layout::Direction::Horizontal,
-        percent_y,
-    )
-}
-
 pub fn centered_pct(r: Rect, direction: ratatui::layout::Direction, percent: u16) -> Rect {
     Layout::default()
         .direction(direction)

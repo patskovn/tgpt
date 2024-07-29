@@ -63,7 +63,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 textfield::Delegated::Commit => Effect::run(|send| {
                     Box::pin(async move {
                         tokio::time::sleep(Duration::from_secs(1)).await;
-                        send.async_send(Action::SendChatMessage).await;
+                        send.send(Action::SendChatMessage);
                     })
                 }),
             },
