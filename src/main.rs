@@ -109,7 +109,7 @@ impl tca::Reducer<State<'_>, AppAction> for AppFeature {
 
 type AppStore<'a> = tca::Store<AppFeature, State<'a>, AppAction>;
 
-fn ui(frame: &mut Frame, state: State) {
+fn ui(frame: &mut Frame, state: &State) {
     match state.navigation.current_screen {
         CurrentScreen::Chat => chat_loader::ui(frame, frame.size(), &state.chat),
         CurrentScreen::Config => auth::ui(frame, frame.size(), &state.auth),
@@ -143,7 +143,6 @@ async fn main() -> anyhow::Result<()> {
     store
         .run(
             |state| {
-                log::debug!("Redrawing! {:#?}", state.chat);
                 let _ = terminal.draw(|f| ui(f, state));
             },
             AppAction::Event,

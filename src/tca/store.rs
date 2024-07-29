@@ -47,20 +47,17 @@ where
         }
     }
 
-    pub async fn run<Redraw, EM>(
+    pub async fn run(
         &self,
-        mut redraw: Redraw,
-        event_mapper: EM,
+        mut redraw: impl FnMut(&State),
+        event_mapper: impl Fn(Event) -> Action,
         terminal_events: &mut EventStream,
-    ) where
-        Redraw: FnMut(State),
-        EM: Fn(Event) -> Action,
-    {
+    ) {
         let mut receiver_guard = self.event_reciever.lock().await;
 
         {
             let state = self.state.lock().await;
-            redraw(state.clone());
+            redraw(&state);
         };
         loop {
             let crossterm_event = terminal_events.next().fuse();
@@ -68,11 +65,8 @@ where
                 Some(evt) = receiver_guard.recv() => {
                     match evt {
                     StoreEvent::RedrawUI => {
-                        let state = {
-                            let state = self.state.lock().await;
-                            state.clone()
-                        };
-                        redraw(state);
+                        let state = self.state.lock().await;
+                        redraw(&state);
                     },
                     StoreEvent::Action(action) => self.internal_send(action).await,
                     StoreEvent::Quit => { break }
