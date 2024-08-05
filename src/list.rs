@@ -74,8 +74,8 @@ pub enum Delegated {
 #[derive(Default)]
 pub struct ListFeature {}
 
-impl<'a> From<gpt::Provider> for ListItem<'a> {
-    fn from(value: gpt::Provider) -> Self {
+impl<'a> From<gpt::types::Provider> for ListItem<'a> {
+    fn from(value: gpt::types::Provider) -> Self {
         Self::from(format!("{}", value))
     }
 }

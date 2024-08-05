@@ -2,13 +2,15 @@ use crossterm::event::Event;
 use ratatui::{layout::Rect, Frame};
 
 use crate::{
-    chat_gpt_configuration, gpt, list, navigation,
+    app::chat_gpt_configuration,
+    app::navigation,
+    gpt, list,
     tca::{Effect, Reducer},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State<'a> {
-    providers: list::State<gpt::Provider>,
+    providers: list::State<gpt::types::Provider>,
 
     configuration: Option<Configuration<'a>>,
 }
@@ -21,7 +23,7 @@ enum Configuration<'a> {
 impl Default for State<'_> {
     fn default() -> Self {
         Self {
-            providers: list::State::new(vec![gpt::Provider::OpenAI]),
+            providers: list::State::new(vec![gpt::types::Provider::OpenAI]),
             configuration: None,
         }
     }
@@ -86,7 +88,7 @@ impl Reducer<State<'_>, Action> for AuthReducer {
             Action::List(list::Action::Delegated(delegated)) => match delegated {
                 list::Delegated::Noop(e) => Effect::send(Action::Delegated(Delegated::Noop(e))),
                 list::Delegated::Enter(idx) => match state.providers.items[idx] {
-                    gpt::Provider::OpenAI => {
+                    gpt::types::Provider::OpenAI => {
                         state.configuration =
                             Some(Configuration::ChatGPT(chat_gpt_configuration::State::new()));
 

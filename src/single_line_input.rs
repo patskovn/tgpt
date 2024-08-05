@@ -46,8 +46,8 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                         state
                             .textarea
                             .textarea
-                            .move_cursor(tui_textarea::CursorMove::Jump(0, u16::max_value()));
-                        state.textarea.textarea.delete_str(usize::max_value());
+                            .move_cursor(tui_textarea::CursorMove::Jump(0, u16::MAX));
+                        state.textarea.textarea.delete_str(usize::MAX);
                     }
                     Effect::none()
                 }

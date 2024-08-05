@@ -8,8 +8,8 @@ use ratatui::{
 };
 
 use crate::{
-    gpt::ChatGPTConfiguration,
-    navigation,
+    app::navigation,
+    gpt::types::ChatGPTConfiguration,
     tca::{self, Effect},
     textfield,
 };

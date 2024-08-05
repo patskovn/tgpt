@@ -2,7 +2,9 @@ use crossterm::event::Event;
 use ratatui::{layout::Rect, widgets::Paragraph, Frame};
 
 use crate::{
-    chat, gpt, navigation,
+    app::chat,
+    app::navigation,
+    gpt,
     tca::{self, Effect},
 };
 
@@ -46,7 +48,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 _ => panic!("Attempted to send {:#?} for {:#?} state", action, state),
             },
             Action::Delegated(_) => Effect::none(),
-            Action::ReloadConfig => match gpt::ChatGPTConfiguration::open() {
+            Action::ReloadConfig => match gpt::types::ChatGPTConfiguration::open() {
                 Some(config) => {
                     *state = State::Chat(chat::State::new(config));
                     Effect::none()

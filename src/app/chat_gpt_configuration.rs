@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    gpt::ChatGPTConfiguration,
+    gpt::types::ChatGPTConfiguration,
     single_line_input,
     tca::{self, Effect},
     uiutils::{centered_constraint, centered_pct},
