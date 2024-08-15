@@ -8,7 +8,7 @@ use crate::{
     tca::{self, Effect},
 };
 
-#[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub enum State<'a> {
     #[default]
     None,
@@ -48,7 +48,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 _ => panic!("Attempted to send {:#?} for {:#?} state", action, state),
             },
             Action::Delegated(_) => Effect::none(),
-            Action::ReloadConfig => match gpt::types::ChatGPTConfiguration::open() {
+            Action::ReloadConfig => match gpt::openai::ChatGPTConfiguration::open() {
                 Some(config) => {
                     *state = State::Chat(chat::State::new(config));
                     Effect::none()

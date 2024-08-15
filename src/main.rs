@@ -3,6 +3,7 @@ mod editor;
 mod gpt;
 mod list;
 mod panic_handler;
+mod scroll_view;
 mod single_line_input;
 mod tca;
 mod textfield;

@@ -13,12 +13,11 @@ use crate::{
     tca::{self, Effect},
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct State<T>
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
-    T: Eq,
 {
     list_state: ListState,
     pub items: Vec<T>,
@@ -28,7 +27,6 @@ impl<T> State<T>
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
-    T: Eq,
 {
     pub fn new(items: Vec<T>) -> Self {
         State {
@@ -42,7 +40,6 @@ pub fn ui<T>(frame: &mut Frame, area: Rect, state: &State<T>)
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
-    T: Eq,
 {
     let items: Vec<ListItem> = state.items.iter().map(|i| i.clone().into()).collect();
     let list = List::new(items)

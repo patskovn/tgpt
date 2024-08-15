@@ -38,7 +38,7 @@ impl TryFrom<KeyCode> for CurrentScreen {
     }
 }
 
-#[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct State {
     pub current_screen: CurrentScreen,
 }

@@ -22,7 +22,7 @@ pub enum Delegated {
 
 #[derive(Debug, Clone)]
 pub struct State<'a> {
-    editor: Vim,
+    pub editor: Vim,
     pub textarea: TextArea<'a>,
     block: Option<Block<'a>>,
 }

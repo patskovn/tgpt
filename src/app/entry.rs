@@ -8,7 +8,7 @@ use crossterm::event::Event;
 use crossterm::event::KeyEventKind;
 use ratatui::Frame;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
     pub navigation: navigation::State,
     pub chat: chat_loader::State<'a>,

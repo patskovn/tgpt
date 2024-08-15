@@ -8,7 +8,7 @@ use crate::{
     tca::{Effect, Reducer},
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
     providers: list::State<gpt::types::Provider>,
 

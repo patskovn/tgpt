@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1.0.82"
 async-trait = "0.1.80"
 better-panic = "0.3.0"
+chatgpt_rs = { version = "1.2.3", features = ["streams"] }
 color-eyre = "0.6.3"
 crossterm = { version = "0.27.0", features = ["event-stream"] }
 dirs = "5.0.1"
@@ -16,7 +17,8 @@ futures = "0.3.30"
 human-panic = "2.0.0"
 libc = "0.2.155"
 log = "0.4.21"
-ratatui = "0.26.1"
+ratatui = { version = "0.27.0", features = ["all-widgets", "unstable-rendered-line-info"] }
+ratatui-widgets = "0.1.10"
 rs_openai = "0.4.1"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_derive = "1.0.203"
@@ -25,4 +27,5 @@ simplelog = "0.12.2"
 strip-ansi-escapes = "0.2.0"
 tokio = { version = "1.38.0", features = ["full"] }
 trace = "0.1.7"
+tui-scrollview = "0.3.12"
 tui-textarea = "0.4.0"
