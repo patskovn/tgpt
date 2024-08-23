@@ -12,6 +12,7 @@ mod uiutils;
 use crate::app::navigation;
 use std::fs::File;
 use std::io::{self};
+use std::sync::{Arc, Mutex};
 
 use crate::tca::Effect;
 use anyhow::Context;
@@ -38,10 +39,32 @@ fn configure_logger() -> anyhow::Result<()> {
     .context("Failed to configure logging")
 }
 
+struct WithGeneric<State>
+where
+    State: 'static,
+{
+    state: Arc<Mutex<State>>,
+}
+
+impl<State: 'static + std::marker::Send> WithGeneric<State> {
+    fn new(state: State) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(state)),
+        }
+    }
+    fn test(&self) {
+        let state_clone = self.state.clone();
+        tokio::spawn(async move {
+            let clone = state_clone;
+        });
+    }
+}
+
 async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()> {
     let mut terminal_events = crossterm::event::EventStream::new();
 
     let reducer = Feature::default();
+    let s = WithGeneric::new(State::default());
     let store = tca::Store::new(State::default(), reducer);
     store.send(Action::Navigation(navigation::Action::Delegated(
         navigation::DelegatedAction::ChangeScreen(navigation::CurrentScreen::Chat),

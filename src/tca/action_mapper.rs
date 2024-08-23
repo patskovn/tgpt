@@ -1,23 +1,25 @@
+use std::sync::Arc;
+
 use crate::tca::action_sender::ActionSender;
 
-pub struct ActionMapper<'a, Action, MappedAction, F>
+pub struct ActionMapper<Action, MappedAction, F>
 where
     Action: std::marker::Send,
     MappedAction: std::marker::Send,
     F: Fn(Action) -> MappedAction + std::marker::Send,
 {
-    parent: Box<dyn ActionSender<SendableAction = MappedAction> + 'a>,
+    parent: Arc<dyn ActionSender<SendableAction = MappedAction>>,
     map: F,
     phantom: std::marker::PhantomData<Action>,
 }
 
-impl<'a, Action, MappedAction, F> ActionMapper<'a, Action, MappedAction, F>
+impl<Action, MappedAction, F> ActionMapper<Action, MappedAction, F>
 where
     Action: std::marker::Send,
     MappedAction: std::marker::Send,
     F: Fn(Action) -> MappedAction + std::marker::Send,
 {
-    pub fn new(parent: Box<dyn ActionSender<SendableAction = MappedAction> + 'a>, map: F) -> Self {
+    pub fn new(parent: Arc<dyn ActionSender<SendableAction = MappedAction>>, map: F) -> Self {
         Self {
             parent,
             map,
@@ -26,11 +28,11 @@ where
     }
 }
 
-impl<'a, Action, MappedAction, F> ActionSender for ActionMapper<'a, Action, MappedAction, F>
+impl<Action, MappedAction, F> ActionSender for ActionMapper<Action, MappedAction, F>
 where
-    Action: std::marker::Send,
+    Action: std::marker::Send + std::marker::Sync,
     MappedAction: std::marker::Send,
-    F: Fn(Action) -> MappedAction + std::marker::Send,
+    F: Fn(Action) -> MappedAction + std::marker::Send + std::marker::Sync,
 {
     type SendableAction = Action;
 

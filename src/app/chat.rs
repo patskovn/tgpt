@@ -47,32 +47,7 @@ impl State<'_> {
             textarea: textfield::State::default(),
             current_focus: CurrentFocus::TextArea,
             config,
-            history: vec![
-                ChatMessage {
-                    role: Role::User,
-                    content: "1".to_string() + TEST,
-                },
-                ChatMessage {
-                    role: Role::User,
-                    content: "2".to_string() + TEST,
-                },
-                ChatMessage {
-                    role: Role::User,
-                    content: "3".to_string() + TEST,
-                },
-                ChatMessage {
-                    role: Role::User,
-                    content: "4".to_string() + TEST,
-                },
-                ChatMessage {
-                    role: Role::User,
-                    content: "5".to_string() + TEST,
-                },
-                ChatMessage {
-                    role: Role::User,
-                    content: "6".to_string() + TEST,
-                },
-            ],
+            history: Default::default(),
             partial: Default::default(),
             scroll_state: Default::default(),
             is_streaming: false,
