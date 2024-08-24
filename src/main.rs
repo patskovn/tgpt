@@ -1,3 +1,5 @@
+use futures::{FutureExt, StreamExt};
+use tca::ActionSender;
 mod app;
 mod editor;
 mod gpt;
@@ -5,16 +7,13 @@ mod list;
 mod panic_handler;
 mod scroll_view;
 mod single_line_input;
-mod tca;
 mod textfield;
 mod uiutils;
 
 use crate::app::navigation;
 use std::fs::File;
 use std::io::{self};
-use std::sync::{Arc, Mutex};
 
-use crate::tca::Effect;
 use anyhow::Context;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
@@ -29,6 +28,7 @@ use crate::app::entry::ui;
 use crate::app::entry::Action;
 use crate::app::entry::Feature;
 use crate::app::entry::State;
+use tca::ChangeObserver;
 
 fn configure_logger() -> anyhow::Result<()> {
     CombinedLogger::init(vec![WriteLogger::new(
@@ -39,45 +39,40 @@ fn configure_logger() -> anyhow::Result<()> {
     .context("Failed to configure logging")
 }
 
-struct WithGeneric<State>
-where
-    State: 'static,
-{
-    state: Arc<Mutex<State>>,
-}
-
-impl<State: 'static + std::marker::Send> WithGeneric<State> {
-    fn new(state: State) -> Self {
-        Self {
-            state: Arc::new(Mutex::new(state)),
-        }
-    }
-    fn test(&self) {
-        let state_clone = self.state.clone();
-        tokio::spawn(async move {
-            let clone = state_clone;
-        });
-    }
-}
-
 async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()> {
-    let mut terminal_events = crossterm::event::EventStream::new();
-
-    let reducer = Feature::default();
-    let s = WithGeneric::new(State::default());
-    let store = tca::Store::new(State::default(), reducer);
+    let store = tca::Store::new(State::default(), Feature::default());
     store.send(Action::Navigation(navigation::Action::Delegated(
         navigation::DelegatedAction::ChangeScreen(navigation::CurrentScreen::Chat),
     )));
-    store
-        .run(
-            |state| {
-                let _ = terminal.draw(|f| ui(f, state));
-            },
-            Action::Event,
-            &mut terminal_events,
-        )
-        .await;
+
+    let mut redraw_events = store.observe();
+    let mut terminal_events = crossterm::event::EventStream::new();
+
+    loop {
+        let crossterm_event = terminal_events.next().fuse();
+        let redraw_event = redraw_events.recv().fuse();
+        tokio::select! {
+            maybe_redraw = redraw_event => {
+                match maybe_redraw {
+                Ok(()) => {
+                    let state = store.state();
+                    terminal.draw(|f| ui(f, &state))?;
+                },
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    break;
+                },
+                Err(err) => return Err(err.into()),
+                }
+            }
+            maybe_event = crossterm_event => {
+                match maybe_event {
+                    Some(Ok(evt)) => store.send(Action::Event(evt)),
+                    Some(Err(err)) => return Err(err.into()),
+                    None => continue,
+                }
+            }
+        }
+    }
 
     Ok(())
 }

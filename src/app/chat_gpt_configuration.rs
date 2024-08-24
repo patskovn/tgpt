@@ -4,11 +4,11 @@ use ratatui::{
     widgets::{block::Title, Block, Borders},
     Frame,
 };
+use tca::Effect;
 
 use crate::{
     gpt::openai::ChatGPTConfiguration,
     single_line_input,
-    tca::{self, Effect},
     uiutils::{centered_constraint, centered_pct},
 };
 
@@ -51,7 +51,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::Event(e) => Effect::send(Action::Input(single_line_input::Action::Event(e))),

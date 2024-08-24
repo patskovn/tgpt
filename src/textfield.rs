@@ -3,8 +3,7 @@ use ratatui::widgets::{Block, Widget};
 use tui_textarea::TextArea;
 
 use crate::editor::{self, Mode, Transition, Vim};
-use crate::tca;
-use crate::tca::Effect;
+use tca::Effect;
 
 #[derive(Debug)]
 pub enum Action {
@@ -69,7 +68,7 @@ impl<'a> Default for State<'a> {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Event(event) => {
                 match state

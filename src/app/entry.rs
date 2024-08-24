@@ -2,11 +2,10 @@ use crate::app::auth;
 use crate::app::chat_loader;
 use crate::app::navigation;
 use crate::navigation::CurrentScreen;
-use crate::tca;
-use crate::Effect;
 use crossterm::event::Event;
 use crossterm::event::KeyEventKind;
 use ratatui::Frame;
+use tca::Effect;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
@@ -41,7 +40,7 @@ impl Feature {
 }
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Chat(chat_loader::Action::Delegated(chat_loader::Delegated::Noop(e)))
             | Action::Config(auth::Action::Delegated(auth::Delegated::Noop(e))) => {

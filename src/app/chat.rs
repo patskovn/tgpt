@@ -1,8 +1,7 @@
 use chatgpt::{
     prelude::Conversation,
-    types::{ChatMessage, ResponseChunk, Role},
+    types::{ChatMessage, ResponseChunk},
 };
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{self, Event, KeyModifiers};
 use futures::{FutureExt, StreamExt};
 use ratatui::{
@@ -11,15 +10,15 @@ use ratatui::{
     widgets::{block::Title, Block, Borders, Paragraph, Widget, Wrap},
     Frame,
 };
+use tca::ActionSender;
+use tca::Effect;
 use tui_scrollview::ScrollView;
 
 use crate::{
     app::navigation,
     editor::Mode,
     gpt::openai::{Api, ChatGPTConfiguration},
-    scroll_view,
-    tca::{self, Effect},
-    textfield,
+    scroll_view, textfield,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -76,7 +75,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::CommitMessage(msg) => {

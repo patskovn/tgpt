@@ -9,7 +9,7 @@ use ratatui::{
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 
-use crate::tca::{self, Effect};
+use tca::Effect;
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub enum CurrentScreen {
@@ -60,7 +60,7 @@ pub enum DelegatedAction {
 pub struct NavigationReducer {}
 
 impl tca::Reducer<State, Action> for NavigationReducer {
-    fn reduce<'effect>(&self, _state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, _state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::Event(e) => match e {

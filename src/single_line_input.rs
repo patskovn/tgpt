@@ -1,10 +1,8 @@
 use crossterm::event::Event;
 use ratatui::{layout::Rect, widgets::Block, Frame};
+use tca::Effect;
 
-use crate::{
-    tca::{self, Effect},
-    textfield,
-};
+use crate::textfield;
 
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub struct State<'a> {
@@ -37,7 +35,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::TextField(textfield::Action::Delegated(delegated)) => match delegated {

@@ -1,12 +1,8 @@
 use crossterm::event::Event;
 use ratatui::{layout::Rect, widgets::Paragraph, Frame};
+use tca::Effect;
 
-use crate::{
-    app::chat,
-    app::navigation,
-    gpt,
-    tca::{self, Effect},
-};
+use crate::{app::chat, app::navigation, gpt};
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub enum State<'a> {
@@ -32,7 +28,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce<'effect>(&self, state: &mut State, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Event(e) => match state {
                 State::None => Effect::send(Action::Delegated(Delegated::Noop(e))),

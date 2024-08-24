@@ -1,4 +1,5 @@
 use std::cmp::{max, min};
+use tca::Effect;
 
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -8,10 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{
-    gpt,
-    tca::{self, Effect},
-};
+use crate::gpt;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<T>
@@ -83,7 +81,7 @@ where
     T: Clone,
     T: Eq,
 {
-    fn reduce<'effect>(&self, state: &mut State<T>, action: Action) -> Effect<'effect, Action> {
+    fn reduce(&self, state: &mut State<T>, action: Action) -> Effect<Action> {
         match action {
             Action::Event(e) => match e {
                 Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
