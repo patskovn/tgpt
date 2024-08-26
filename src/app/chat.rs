@@ -3,16 +3,16 @@ use chatgpt::{
     types::{ChatMessage, ResponseChunk},
 };
 use crossterm::event::{self, Event, KeyModifiers};
-use futures::{FutureExt, StreamExt};
+use futures::StreamExt;
 use ratatui::{
-    layout::{Constraint, Layout, Rect, Size},
+    layout::{Constraint, Layout, Position, Rect, Size},
     style::{Style, Stylize},
     widgets::{block::Title, Block, Borders, Paragraph, Widget, Wrap},
     Frame,
 };
 use tca::ActionSender;
 use tca::Effect;
-use tui_scrollview::ScrollView;
+use tui_scrollview::{ScrollView, ScrollViewState};
 
 use crate::{
     app::navigation,
@@ -20,6 +20,25 @@ use crate::{
     gpt::openai::{Api, ChatGPTConfiguration},
     scroll_view, textfield,
 };
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub struct ScrollViewDiementions {
+    scroll_size: Size,
+    frame_size: Size,
+}
+
+impl ScrollViewDiementions {
+    fn ensure_within_bounds(&self, offset: Position) -> Position {
+        Position {
+            x: 0,
+            y: offset.y.min(
+                self.scroll_size
+                    .height
+                    .saturating_sub(self.frame_size.height),
+            ),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
@@ -29,6 +48,7 @@ pub struct State<'a> {
     history: Vec<ChatMessage>,
     partial: Vec<ChatMessage>,
     scroll_state: scroll_view::State,
+    scroll_view_dimentions: Option<ScrollViewDiementions>,
     is_streaming: bool,
 }
 
@@ -46,9 +66,43 @@ impl State<'_> {
             textarea: textfield::State::default(),
             current_focus: CurrentFocus::TextArea,
             config,
-            history: Default::default(),
+            history: vec![
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+                ChatMessage {
+                    role: chatgpt::types::Role::User,
+                    content: TEST.to_owned(),
+                },
+            ],
             partial: Default::default(),
             scroll_state: Default::default(),
+            scroll_view_dimentions: Default::default(),
             is_streaming: false,
         }
     }
@@ -59,7 +113,9 @@ pub enum Action {
     Event(Event),
     TextField(textfield::Action),
     ScrollView(scroll_view::Action),
-    BegunStreaming,
+    FixupScrollView(ScrollViewState),
+    ScrollViewDimentionsChanged(ScrollViewDiementions),
+    BeganStreaming,
     StoppedStreaming,
     Delegated(Delegated),
     CommitMessage(ChatMessage),
@@ -90,6 +146,12 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             Action::ScrollView(scroll_view::Action::Delegated(delegated)) => match delegated {
                 scroll_view::Delegated::Up => {
                     state.scroll_state.scroll.scroll_up();
+                    if let Some(scroll_dimentions) = state.scroll_view_dimentions {
+                        state.scroll_state.scroll.set_offset(
+                            scroll_dimentions
+                                .ensure_within_bounds(state.scroll_state.scroll.offset()),
+                        );
+                    }
                     Effect::none()
                 }
                 scroll_view::Delegated::Down => {
@@ -103,6 +165,22 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             Action::ScrollView(action) => scroll_view::Feature::default()
                 .reduce(&mut state.scroll_state, action)
                 .map(Action::ScrollView),
+            Action::FixupScrollView(scroll_view_state) => {
+                state.scroll_state.scroll = scroll_view_state;
+                Effect::none()
+            }
+            Action::ScrollViewDimentionsChanged(scroll_dimentions) => {
+                if Some(scroll_dimentions) == state.scroll_view_dimentions {
+                    return Effect::none();
+                }
+                state.scroll_view_dimentions = Some(scroll_dimentions);
+                state.scroll_state.scroll.scroll_to_bottom();
+                state.scroll_state.scroll.set_offset(
+                    scroll_dimentions.ensure_within_bounds(state.scroll_state.scroll.offset()),
+                );
+
+                Effect::none()
+            }
             Action::TextField(textfield::Action::Delegated(delegated)) => match delegated {
                 textfield::Delegated::Quit => Effect::none(),
                 textfield::Delegated::Noop(e) => {
@@ -118,42 +196,39 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     let message = state.textarea.textarea.lines().join("\n");
                     state.textarea = crate::textfield::State::default();
 
-                    Effect::run(|send| {
-                        async move {
-                            if message.is_empty() {
-                                return;
-                            }
-                            send.send(Action::BegunStreaming);
-                            let user_message = ChatMessage {
-                                role: chatgpt::types::Role::User,
-                                content: message.clone(),
-                            };
-                            send.send(Action::CommitMessage(user_message));
-
-                            let mut conversation = if history.is_empty() {
-                                api.client.new_conversation()
-                            } else {
-                                Conversation::new_with_history(api.client, history)
-                            };
-                            let mut stream =
-                                conversation.send_message_streaming(message).await.unwrap();
-
-                            let mut output: Vec<ResponseChunk> = Vec::new();
-                            while let Some(chunk) = stream.next().await {
-                                output.push(chunk);
-                                let partial = ChatMessage::from_response_chunks(output.clone());
-                                send.send(Action::UpdatePartial(partial));
-                            }
-                            for message in ChatMessage::from_response_chunks(output).into_iter() {
-                                send.send(Action::CommitMessage(message));
-                            }
-                            send.send(Action::StoppedStreaming);
+                    Effect::run(|send| async move {
+                        if message.is_empty() {
+                            return;
                         }
-                        .boxed()
+                        send.send(Action::BeganStreaming);
+                        let user_message = ChatMessage {
+                            role: chatgpt::types::Role::User,
+                            content: message.clone(),
+                        };
+                        send.send(Action::CommitMessage(user_message));
+
+                        let mut conversation = if history.is_empty() {
+                            api.client.new_conversation()
+                        } else {
+                            Conversation::new_with_history(api.client, history)
+                        };
+                        let mut stream =
+                            conversation.send_message_streaming(message).await.unwrap();
+
+                        let mut output: Vec<ResponseChunk> = Vec::new();
+                        while let Some(chunk) = stream.next().await {
+                            output.push(chunk);
+                            let partial = ChatMessage::from_response_chunks(output.clone());
+                            send.send(Action::UpdatePartial(partial));
+                        }
+                        for message in ChatMessage::from_response_chunks(output).into_iter() {
+                            send.send(Action::CommitMessage(message));
+                        }
+                        send.send(Action::StoppedStreaming);
                     })
                 }
             },
-            Action::BegunStreaming => {
+            Action::BeganStreaming => {
                 state.is_streaming = true;
                 Effect::none()
             }
@@ -220,7 +295,7 @@ impl Inset {
     }
 }
 
-pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
+pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State, Action>) {
     let navigation = navigation::ui(navigation::CurrentScreen::Chat);
     let body = {
         let layout = Layout::default()
@@ -282,16 +357,28 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
     });
 
     let mut renderable_state = state.scroll_state.scroll;
+    let scroll_size = scroll_view.size();
+    let scroll_area = navigation.inner(body).as_size();
+    let scroll_dimentions = ScrollViewDiementions {
+        frame_size: scroll_area,
+        scroll_size,
+    };
+    let max_offset = scroll_size.height.saturating_sub(scroll_area.height);
     renderable_state.set_offset(ratatui::layout::Position {
         x: 0,
-        y: std::cmp::min(renderable_state.offset().y, scroll_view.size().height),
+        y: std::cmp::min(renderable_state.offset().y, max_offset),
     });
 
     frame.render_stateful_widget(scroll_view, navigation.inner(body), &mut renderable_state);
+
     let navigation_style = if state.current_focus == CurrentFocus::Chat {
         Style::new().blue()
     } else {
         Style::default()
     };
     frame.render_widget(navigation.border_style(navigation_style), body);
+
+    if Some(scroll_dimentions) != state.scroll_view_dimentions {
+        store.send(Action::ScrollViewDimentionsChanged(scroll_dimentions));
+    }
 }

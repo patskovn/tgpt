@@ -6,6 +6,7 @@ use crossterm::event::Event;
 use crossterm::event::KeyEventKind;
 use ratatui::Frame;
 use tca::Effect;
+use tca::Store;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
@@ -87,9 +88,14 @@ impl tca::Reducer<State<'_>, Action> for Feature {
     }
 }
 
-pub fn ui(frame: &mut Frame, state: &State) {
+pub fn ui(frame: &mut Frame, state: &State, store: Store<State, Action>) {
     match state.navigation.current_screen {
-        CurrentScreen::Chat => chat_loader::ui(frame, frame.size(), &state.chat),
+        CurrentScreen::Chat => chat_loader::ui(
+            frame,
+            frame.size(),
+            &state.chat,
+            store.scope(|s| &s.chat, Action::Chat),
+        ),
         CurrentScreen::Config => auth::ui(frame, frame.size(), &state.auth),
     }
 }

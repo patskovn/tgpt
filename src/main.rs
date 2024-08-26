@@ -56,7 +56,8 @@ async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()
                 match maybe_redraw {
                 Ok(()) => {
                     let state = store.state();
-                    terminal.draw(|f| ui(f, &state))?;
+                    log::debug!("Render!");
+                    terminal.draw(|f| ui(f, &state, store.clone()))?;
                 },
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                     break;

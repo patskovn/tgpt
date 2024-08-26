@@ -11,6 +11,15 @@ pub enum State<'a> {
     Chat(chat::State<'a>),
 }
 
+impl<'a> State<'a> {
+    fn chat(&self) -> &chat::State<'a> {
+        match &self {
+            State::None => panic!("Wrong"),
+            State::Chat(c) => c,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Action {
     Event(Event),
@@ -55,7 +64,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
     }
 }
 
-pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
+pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State, Action>) {
     match state {
         State::None => {
             let navigation = navigation::ui(navigation::CurrentScreen::Chat);
@@ -66,7 +75,7 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
             );
         }
         State::Chat(chat) => {
-            chat::ui(frame, area, chat);
+            chat::ui(frame, area, chat, store.scope(|s| s.chat(), Action::Chat));
         }
     }
 }
