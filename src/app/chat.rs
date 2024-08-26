@@ -66,40 +66,7 @@ impl State<'_> {
             textarea: textfield::State::default(),
             current_focus: CurrentFocus::TextArea,
             config,
-            history: vec![
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-                ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_owned(),
-                },
-            ],
+            history: Default::default(),
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -113,7 +80,6 @@ pub enum Action {
     Event(Event),
     TextField(textfield::Action),
     ScrollView(scroll_view::Action),
-    FixupScrollView(ScrollViewState),
     ScrollViewDimentionsChanged(ScrollViewDiementions),
     BeganStreaming,
     StoppedStreaming,
@@ -165,10 +131,6 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             Action::ScrollView(action) => scroll_view::Feature::default()
                 .reduce(&mut state.scroll_state, action)
                 .map(Action::ScrollView),
-            Action::FixupScrollView(scroll_view_state) => {
-                state.scroll_state.scroll = scroll_view_state;
-                Effect::none()
-            }
             Action::ScrollViewDimentionsChanged(scroll_dimentions) => {
                 if Some(scroll_dimentions) == state.scroll_view_dimentions {
                     return Effect::none();
@@ -328,7 +290,7 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
         let inner = block.inner(sample);
 
         let paragraph = Paragraph::new(msg.content.clone())
-            .wrap(Wrap { trim: true })
+            .wrap(Wrap { trim: false })
             .block(block);
 
         let inset = Inset::new(

@@ -29,7 +29,13 @@ pub struct State<'a> {
 impl PartialEq for State<'_> {
     fn eq(&self, other: &Self) -> bool {
         let areas_eq = self.textarea.lines() == other.textarea.lines();
-        self.editor == other.editor && self.block == other.block && areas_eq
+        let cursor_eq = self.textarea.cursor() == other.textarea.cursor();
+        let alignment_eq = self.textarea.alignment() == other.textarea.alignment();
+        self.editor == other.editor
+            && self.block == other.block
+            && areas_eq
+            && cursor_eq
+            && alignment_eq
     }
 }
 impl Eq for State<'_> {}
