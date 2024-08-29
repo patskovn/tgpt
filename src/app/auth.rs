@@ -120,6 +120,3 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
 
     frame.render_widget(navigation, area);
 }
-
-#[derive(Debug)]
-struct ChatGPTSelectionState {}
