@@ -74,7 +74,7 @@ impl<'a> Default for State<'a> {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Event(event) => {
                 match state

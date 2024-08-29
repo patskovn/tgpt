@@ -2,16 +2,18 @@ use chatgpt::{
     prelude::Conversation,
     types::{ChatMessage, ResponseChunk},
 };
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{self, Event, KeyModifiers};
 use derive_new::new;
 use futures::StreamExt;
 use ratatui::{
     layout::{Constraint, Layout, Position, Rect, Size},
-    style::{Style, Styled, Stylize},
+    style::{Color, Style, Styled, Stylize},
     text::{Line, Span},
     widgets::{block::Title, Block, Borders, Paragraph, Widget, Wrap},
     Frame,
+};
+use syntect::{
+    easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet, util::LinesWithEndings,
 };
 use tca::ActionSender;
 use tca::Effect;
@@ -44,12 +46,12 @@ impl ScrollViewDiementions {
 }
 
 #[derive(Debug, Clone)]
-struct DisplayableMessage {
+struct DisplayableMessage<'a> {
     original: ChatMessage,
-    display: Vec<MarkdownContent>,
+    display: Vec<MarkdownContent<'a>>,
 }
 
-impl PartialEq for DisplayableMessage {
+impl PartialEq for DisplayableMessage<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.original == other.original
     }
@@ -60,8 +62,8 @@ pub struct State<'a> {
     textarea: textfield::State<'a>,
     current_focus: CurrentFocus,
     config: ChatGPTConfiguration,
-    history: Vec<DisplayableMessage>,
-    partial: Vec<DisplayableMessage>,
+    history: Vec<DisplayableMessage<'a>>,
+    partial: Vec<DisplayableMessage<'a>>,
     scroll_state: scroll_view::State,
     scroll_view_dimentions: Option<ScrollViewDiementions>,
     is_streaming: bool,
@@ -81,13 +83,7 @@ impl State<'_> {
             textarea: textfield::State::default(),
             current_focus: CurrentFocus::TextArea,
             config,
-            history: vec![DisplayableMessage {
-                original: ChatMessage {
-                    role: chatgpt::types::Role::User,
-                    content: TEST.to_string(),
-                },
-                display: parse_markdown(TEST),
-            }],
+            history: Default::default(),
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -158,8 +154,8 @@ fn markdown_parse_options() -> markdown::ParseOptions {
     }
 }
 
-fn parse_markdown(message: &str) -> Vec<MarkdownContent> {
-    let root_node = markdown::to_mdast(message, &markdown_parse_options()).unwrap();
+fn parse_markdown<'a>(message: String) -> Vec<MarkdownContent<'a>> {
+    let root_node = markdown::to_mdast(&message, &markdown_parse_options()).unwrap();
     log::debug!("Parsed markdown {:#?}", root_node);
     let mut result: Vec<MarkdownContent> = Default::default();
     process_markdown(root_node, &Default::default(), &mut result);
@@ -186,13 +182,13 @@ struct Code {
 }
 
 #[derive(Debug, PartialEq, Clone, Eq, Hash)]
-enum MarkdownContent {
+enum MarkdownContent<'a> {
     StyledText(StyledText),
-    Code(Code),
+    Code(Vec<Paragraph<'a>>),
 }
 
-impl MarkdownContent {
-    fn into_paragraphs<'a>(value: Vec<MarkdownContent>) -> Vec<Paragraph<'a>> {
+impl<'a> MarkdownContent<'a> {
+    fn into_paragraphs(value: Vec<MarkdownContent<'a>>) -> Vec<Paragraph<'a>> {
         let mut all_paragraphs: Vec<Paragraph> = vec![];
         let mut all_lines: Vec<ratatui::prelude::Line> = vec![];
         let mut paragraph_line: Vec<Span> = vec![];
@@ -233,27 +229,10 @@ impl MarkdownContent {
                         }
                     }
                 }
-                Self::Code(code) => {
+                Self::Code(mut code) => {
                     push_line(&mut all_lines, &mut paragraph_line);
                     push_paragraph(&mut all_paragraphs, &mut all_lines);
-                    let mut lines: Vec<Line> = vec![];
-                    lines.push(Line::from(
-                        code.language
-                            .map_or("```".to_string(), |lang| "```".to_string() + &lang),
-                    ));
-                    lines.append(
-                        &mut code
-                            .content
-                            .lines()
-                            .map(|l| Line::from(l.to_owned()))
-                            .collect(),
-                    );
-                    lines.push(Line::from("```"));
-
-                    all_paragraphs.push(
-                        Paragraph::new(lines).set_style(Style::default().gray().on_dark_gray()),
-                    );
-                    all_paragraphs.push(Paragraph::new("\n"));
+                    all_paragraphs.append(&mut code);
                 }
             }
         }
@@ -262,6 +241,55 @@ impl MarkdownContent {
 
         all_paragraphs
     }
+}
+
+#[derive(new)]
+struct HighlightResult<'a> {
+    lines: Vec<Line<'a>>,
+    bg: ratatui::style::Color,
+}
+
+fn highlight_syntax<'a>(language: Option<String>, content: String) -> HighlightResult<'a> {
+    let syntax_set = SyntaxSet::load_defaults_newlines();
+    let theme_set = ThemeSet::load_defaults();
+    let empty_vec: Vec<&str> = vec![];
+    let extensions = language
+        .clone()
+        .and_then(|lang| crate::utils::LANGUAGE_EXTENSIONS.get(&lang))
+        .unwrap_or(&empty_vec);
+
+    let syntax = extensions
+        .iter()
+        .find_map(|ext| syntax_set.find_syntax_by_extension(ext))
+        .unwrap_or(syntax_set.find_syntax_plain_text());
+    log::debug!("Highlighting {:#?}: {:#?}", extensions, syntax.name);
+
+    let mut h = HighlightLines::new(syntax, &theme_set.themes["base16-ocean.dark"]);
+    let mut bg = ratatui::style::Color::DarkGray;
+    let lines = LinesWithEndings::from(&content)
+        .map(|line| {
+            let ranges = h.highlight_line(line, &syntax_set).unwrap_or_default();
+            let styled_text = ranges.into_iter().map(|(style, content)| {
+                bg = Color::Rgb(style.background.r, style.background.g, style.background.b);
+                StyledText::new(
+                    content.to_string(),
+                    Style::default().fg(Color::Rgb(
+                        style.foreground.r,
+                        style.foreground.g,
+                        style.foreground.b,
+                    )),
+                )
+            });
+
+            Line::from(
+                styled_text
+                    .map(ratatui::prelude::Span::from)
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+
+    HighlightResult::new(lines, bg)
 }
 
 impl<'a> From<StyledText> for ratatui::prelude::Span<'a> {
@@ -286,7 +314,24 @@ fn process_markdown(
             )));
         }
         markdown::mdast::Node::Code(n) => {
-            result.push(MarkdownContent::Code(Code::new(n.value, n.lang)))
+            let mut all_paragraphs: Vec<Paragraph> = vec![];
+            let mut lines: Vec<Line> = vec![];
+            lines.push(Line::from(
+                n.lang
+                    .clone()
+                    .map_or("```".to_string(), |lang| "```".to_string() + &lang),
+            ));
+            lines.push(Line::from("\n"));
+            let mut highlighted_code = highlight_syntax(n.lang, n.value);
+            lines.append(&mut highlighted_code.lines);
+            lines.push(Line::from("\n"));
+            lines.push(Line::from("```"));
+
+            all_paragraphs.push(
+                Paragraph::new(lines).set_style(Style::default().gray().bg(highlighted_code.bg)),
+            );
+            all_paragraphs.push(Paragraph::new("\n"));
+            result.push(MarkdownContent::Code(all_paragraphs))
         }
         markdown::mdast::Node::InlineCode(n) => {
             result.push(MarkdownContent::StyledText(process_text(
@@ -344,12 +389,12 @@ fn process_text(text: String, modifiers: &std::collections::HashSet<TextModifier
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::CommitMessage(msg) => {
                 state.partial = Default::default();
-                let parsed_content = parse_markdown(&msg.content);
+                let parsed_content = parse_markdown(msg.content.clone());
                 state.history.push(DisplayableMessage {
                     original: msg,
                     display: parsed_content,
@@ -392,9 +437,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     Effect::send(Action::Delegated(Delegated::Noop(e)))
                 }
             },
-            Action::ScrollView(action) => scroll_view::Feature::default()
-                .reduce(&mut state.scroll_state, action)
-                .map(Action::ScrollView),
+            Action::ScrollView(action) => {
+                scroll_view::Feature::reduce(&mut state.scroll_state, action)
+                    .map(Action::ScrollView)
+            }
             Action::ScrollViewDimentionsChanged(scroll_dimentions) => {
                 if Some(scroll_dimentions) == state.scroll_view_dimentions {
                     return Effect::none();
@@ -467,9 +513,9 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 state.is_streaming = false;
                 Effect::none()
             }
-            Action::TextField(action) => textfield::Feature::default()
-                .reduce(&mut state.textarea, action)
-                .map(Action::TextField),
+            Action::TextField(action) => {
+                textfield::Feature::reduce(&mut state.textarea, action).map(Action::TextField)
+            }
             Action::Event(e) => match e {
                 Event::Key(key)
                     if key.kind == event::KeyEventKind::Press

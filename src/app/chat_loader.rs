@@ -37,7 +37,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Event(e) => match state {
                 State::None => Effect::send(Action::Delegated(Delegated::Noop(e))),
@@ -47,9 +47,9 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 chat::Delegated::Noop(e) => Effect::send(Action::Delegated(Delegated::Noop(e))),
             },
             Action::Chat(action) => match state {
-                State::Chat(chat_state) => chat::Feature::default()
-                    .reduce(chat_state, action)
-                    .map(Action::Chat),
+                State::Chat(chat_state) => {
+                    chat::Feature::reduce(chat_state, action).map(Action::Chat)
+                }
                 _ => panic!("Attempted to send {:#?} for {:#?} state", action, state),
             },
             Action::Delegated(_) => Effect::none(),

@@ -25,7 +25,7 @@ pub enum Delegated {
 pub struct Feature {}
 
 impl tca::Reducer<State, Action> for Feature {
-    fn reduce(&self, _state: &mut State, action: Action) -> tca::Effect<Action> {
+    fn reduce(_state: &mut State, action: Action) -> tca::Effect<Action> {
         match action {
             Action::Event(e) => match e {
                 Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {

@@ -52,7 +52,7 @@ pub enum Delegated {
 #[derive(Default)]
 pub struct AuthReducer {}
 impl Reducer<State<'_>, Action> for AuthReducer {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::ChatGPTConfig(chat_gpt_configuration::Action::Delegated(delegated)) => {
                 match delegated {
@@ -73,8 +73,7 @@ impl Reducer<State<'_>, Action> for AuthReducer {
             }
             Action::ChatGPTConfig(action) => match &mut state.configuration {
                 Some(Configuration::ChatGPT(config_state)) => {
-                    chat_gpt_configuration::Feature::default()
-                        .reduce(config_state, action)
+                    chat_gpt_configuration::Feature::reduce(config_state, action)
                         .map(Action::ChatGPTConfig)
                 }
                 _ => panic!(
@@ -94,9 +93,9 @@ impl Reducer<State<'_>, Action> for AuthReducer {
                 },
                 list::Delegated::Toogle(_) => Effect::none(),
             },
-            Action::List(action) => list::ListFeature::default()
-                .reduce(&mut state.providers, action)
-                .map(Action::List),
+            Action::List(action) => {
+                list::ListFeature::reduce(&mut state.providers, action).map(Action::List)
+            }
             Action::Delegated(_) => Effect::none(),
             Action::Event(e) => match state.configuration {
                 Some(Configuration::ChatGPT(_)) => Effect::send(Action::ChatGPTConfig(

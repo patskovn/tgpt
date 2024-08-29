@@ -60,7 +60,7 @@ pub enum DelegatedAction {
 pub struct NavigationReducer {}
 
 impl tca::Reducer<State, Action> for NavigationReducer {
-    fn reduce(&self, _state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce(_state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::Event(e) => match e {

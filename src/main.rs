@@ -9,6 +9,7 @@ mod scroll_view;
 mod single_line_input;
 mod textfield;
 mod uiutils;
+mod utils;
 
 use crate::app::navigation;
 use std::fs::File;
@@ -40,7 +41,7 @@ fn configure_logger() -> anyhow::Result<()> {
 }
 
 async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()> {
-    let store = tca::Store::new(State::default(), Feature::default());
+    let store = tca::Store::new::<Feature>(State::default());
     store.send(Action::Navigation(navigation::Action::Delegated(
         navigation::DelegatedAction::ChangeScreen(navigation::CurrentScreen::Chat),
     )));

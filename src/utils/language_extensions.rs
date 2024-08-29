@@ -1,0 +1,63 @@
+use lazy_static::lazy_static;
+use maplit::hashmap;
+use std::collections::HashMap;
+
+lazy_static! {
+    pub static ref LANGUAGE_EXTENSIONS: HashMap<String, Vec<&'static str>> = {
+        hashmap! {
+            "assembly".to_string() => vec!["asm", "s"],
+            "bash".to_string() => vec!["sh", "bash"],
+            "c".to_string() => vec!["c"],
+            "cpp".to_string() => vec!["cpp", "cc", "cxx", "c++"],
+            "csharp".to_string() => vec!["cs"],
+            "css".to_string() => vec!["css"],
+            "dart".to_string() => vec!["dart"],
+            "elixir".to_string() => vec!["ex", "exs"],
+            "erlang".to_string() => vec!["erl", "hrl"],
+            "fsharp".to_string() => vec!["fs", "fsi", "fsx"],
+            "go".to_string() => vec!["go"],
+            "groovy".to_string() => vec!["groovy", "gvy", "gy", "gsh"],
+            "haskell".to_string() => vec!["hs"],
+            "html".to_string() => vec!["html", "htm"],
+            "java".to_string() => vec!["java"],
+            "javascript".to_string() => vec!["js"],
+            "json".to_string() => vec!["json"],
+            "julia".to_string() => vec!["jl"],
+            "kotlin".to_string() => vec!["kt", "kts"],
+            "lua".to_string() => vec!["lua"],
+            "markdown".to_string() => vec!["md", "markdown"],
+            "matlab".to_string() => vec!["m"],
+            "objective-c".to_string() => vec!["m", "h"],
+            "ocaml".to_string() => vec!["ml", "mli"],
+            "pascal".to_string() => vec!["pas"],
+            "perl".to_string() => vec!["pl", "pm"],
+            "php".to_string() => vec!["php"],
+            "powershell".to_string() => vec!["ps1", "psm1"],
+            "prolog".to_string() => vec!["pl", "pro"],
+            "python".to_string() => vec!["py"],
+            "r".to_string() => vec!["R", "r"],
+            "ruby".to_string() => vec!["rb"],
+            "rust".to_string() => vec!["rs"],
+            "scala".to_string() => vec!["scala"],
+            "shell".to_string() => vec!["sh"],
+            "sql".to_string() => vec!["sql"],
+            "swift".to_string() => vec!["swift"],
+            "tcl".to_string() => vec!["tcl"],
+            "typescript".to_string() => vec!["ts"],
+            "vbscript".to_string() => vec!["vbs"],
+            "xml".to_string() => vec!["xml"],
+            "yaml".to_string() => vec!["yaml", "yml"],
+            "cobol".to_string() => vec!["cbl", "cob"],
+            "fortran".to_string() => vec!["f90", "f", "for"],
+            "lisp".to_string() => vec!["lisp", "lsp"],
+            "racket".to_string() => vec!["rkt"],
+            "scheme".to_string() => vec!["scm"],
+            "toml".to_string() => vec!["toml"],
+            "ini".to_string() => vec!["ini"],
+            "dockerfile".to_string() => vec!["Dockerfile"],
+            "makefile".to_string() => vec!["Makefile"],
+            "gitignore".to_string() => vec!["gitignore"],
+        }
+    };
+}
+

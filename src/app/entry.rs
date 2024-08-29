@@ -41,20 +41,22 @@ impl Feature {
 }
 
 impl tca::Reducer<State<'_>, Action> for Feature {
-    fn reduce(&self, state: &mut State, action: Action) -> Effect<Action> {
+    fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
             Action::Chat(chat_loader::Action::Delegated(chat_loader::Delegated::Noop(e)))
             | Action::Config(auth::Action::Delegated(auth::Delegated::Noop(e))) => {
-                navigation::NavigationReducer::default()
-                    .reduce(&mut state.navigation, navigation::Action::Event(e))
-                    .map(Action::Navigation)
+                navigation::NavigationReducer::reduce(
+                    &mut state.navigation,
+                    navigation::Action::Event(e),
+                )
+                .map(Action::Navigation)
             }
-            Action::Config(action) => auth::AuthReducer::default()
-                .reduce(&mut state.auth, action)
-                .map(Action::Config),
-            Action::Chat(action) => chat_loader::Feature::default()
-                .reduce(&mut state.chat, action)
-                .map(Action::Chat),
+            Action::Config(action) => {
+                auth::AuthReducer::reduce(&mut state.auth, action).map(Action::Config)
+            }
+            Action::Chat(action) => {
+                chat_loader::Feature::reduce(&mut state.chat, action).map(Action::Chat)
+            }
             Action::Event(e) => match e {
                 Event::Key(key) if key.kind != KeyEventKind::Release => {
                     match state.navigation.current_screen {
