@@ -7,6 +7,10 @@ use chatgpt::{
     prelude::Conversation,
     types::{ChatMessage, ResponseChunk},
 };
+use clipboard::ClipboardContext;
+use clipboard::ClipboardProvider;
+use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
 use crossterm::event::{self, Event, KeyModifiers};
 use derive_new::new;
 use futures::StreamExt;
@@ -58,11 +62,26 @@ impl PartialEq for DisplayableMessage {
     }
 }
 
+impl DisplayableMessage {
+    fn from(text: &str) -> Self {
+        Self {
+            original: ChatMessage {
+                role: chatgpt::types::Role::User,
+                content: text.to_owned(),
+            },
+            display: IntermediateMarkdownPassResult::into_paragraphs(parse_markdown(
+                text.to_string(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
     textarea: textfield::State<'a>,
     current_focus: CurrentFocus,
-    cursor: Option<(usize, usize)>,
+    cursor: (usize, usize),
+    selection: Option<(usize, std::ops::RangeInclusive<usize>)>,
     config: ChatGPTConfiguration,
     history: Vec<DisplayableMessage>,
     partial: Vec<DisplayableMessage>,
@@ -77,16 +96,17 @@ enum CurrentFocus {
     Chat,
 }
 
-const _TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
+const TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
 
 impl State<'_> {
     pub fn new(config: ChatGPTConfiguration) -> Self {
         Self {
             textarea: textfield::State::default(),
             current_focus: CurrentFocus::TextArea,
-            cursor: Default::default(),
+            cursor: (0, 0),
+            selection: Default::default(),
             config,
-            history: Default::default(),
+            history: vec![DisplayableMessage::from(TEST)],
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -116,6 +136,28 @@ pub enum Delegated {
 #[derive(Default)]
 pub struct Feature {}
 
+impl Feature {
+    fn total_lines(state: &State) -> usize {
+        state
+            .history
+            .iter()
+            .chain(state.partial.iter())
+            .flat_map(|d| d.display.iter())
+            .flat_map(|p| p.lines())
+            .count()
+    }
+
+    fn update_selection(state: &mut State) {
+        if let Some(ref mut selection) = state.selection {
+            selection.1 = match selection.0.cmp(&state.cursor.0) {
+                std::cmp::Ordering::Less => selection.0..=state.cursor.0,
+                std::cmp::Ordering::Equal => state.cursor.0..=state.cursor.0,
+                std::cmp::Ordering::Greater => state.cursor.0..=selection.0,
+            };
+        }
+    }
+}
+
 impl tca::Reducer<State<'_>, Action> for Feature {
     fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
@@ -143,6 +185,9 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             }
             Action::ScrollView(scroll_view::Action::Delegated(delegated)) => match delegated {
                 scroll_view::Delegated::Up => {
+                    state.cursor.0 = state.cursor.0.saturating_sub(1);
+                    Feature::update_selection(state);
+
                     state.scroll_state.scroll.scroll_up();
                     if let Some(scroll_dimentions) = state.scroll_view_dimentions {
                         state.scroll_state.scroll.set_offset(
@@ -153,6 +198,12 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     Effect::none()
                 }
                 scroll_view::Delegated::Down => {
+                    state.cursor.0 = state
+                        .cursor
+                        .0
+                        .saturating_add(1)
+                        .min(Self::total_lines(state).saturating_sub(1));
+                    Feature::update_selection(state);
                     state.scroll_state.scroll.scroll_down();
                     Effect::none()
                 }
@@ -240,34 +291,63 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 textfield::Feature::reduce(&mut state.textarea, action).map(Action::TextField)
             }
             Action::Event(e) => match e {
-                Event::Key(key)
-                    if key.kind == event::KeyEventKind::Press
-                        && (state.current_focus != CurrentFocus::TextArea
-                            || state.textarea.editor.mode == Mode::Normal) =>
+                Event::Key(KeyEvent {
+                    code: event::KeyCode::Tab,
+                    kind: event::KeyEventKind::Press,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }) if state.current_focus != CurrentFocus::TextArea
+                    || state.textarea.editor.mode == Mode::Normal =>
                 {
-                    match key.code {
-                        event::KeyCode::Tab if key.modifiers == KeyModifiers::NONE => {
-                            if state.current_focus == CurrentFocus::TextArea {
-                                state.current_focus = CurrentFocus::Chat;
-                            } else {
-                                state.current_focus = CurrentFocus::TextArea;
-                            };
-                            Effect::none()
-                        }
-                        _ => match state.current_focus {
-                            CurrentFocus::Chat => {
-                                Effect::send(Action::ScrollView(scroll_view::Action::Event(e)))
-                            }
-                            CurrentFocus::TextArea => {
-                                Effect::send(Action::TextField(textfield::Action::Event(e)))
-                            }
-                        },
-                    }
+                    if state.current_focus == CurrentFocus::TextArea {
+                        state.current_focus = CurrentFocus::Chat;
+                    } else {
+                        state.current_focus = CurrentFocus::TextArea;
+                    };
+                    Effect::none()
                 }
                 _ => match state.current_focus {
-                    CurrentFocus::Chat => {
-                        Effect::send(Action::ScrollView(scroll_view::Action::Event(e)))
-                    }
+                    CurrentFocus::Chat => match e {
+                        Event::Key(key) if key.kind == event::KeyEventKind::Press => match key.code
+                        {
+                            KeyCode::Char('v') => {
+                                if state.selection.is_some() {
+                                    state.selection = None;
+                                } else {
+                                    state.selection =
+                                        Some((state.cursor.0, state.cursor.0..=state.cursor.0));
+                                }
+                                Effect::none()
+                            }
+                            KeyCode::Char('y') => {
+                                if let Some(selection) = &state.selection {
+                                    let mut ctx: ClipboardContext =
+                                        ClipboardProvider::new().unwrap();
+                                    let clipped_content: String = state
+                                        .history
+                                        .iter()
+                                        .chain(state.partial.iter())
+                                        .flat_map(|d| d.display.iter())
+                                        .flat_map(|paragraph| paragraph.lines.iter())
+                                        .enumerate()
+                                        .filter(|(idx, _)| selection.1.contains(idx))
+                                        .fold(Default::default(), |mut acc, next| {
+                                            for entry in next.1.content.iter() {
+                                                acc.push_str(&entry.content);
+                                            }
+                                            acc
+                                        });
+                                    log::debug!("Clip {}", clipped_content);
+                                    let _ = ctx.set_contents(clipped_content);
+                                }
+                                state.selection = None;
+
+                                Effect::none()
+                            }
+                            _ => Effect::send(Action::ScrollView(scroll_view::Action::Event(e))),
+                        },
+                        _ => Effect::send(Action::ScrollView(scroll_view::Action::Event(e))),
+                    },
                     CurrentFocus::TextArea => {
                         Effect::send(Action::TextField(textfield::Action::Event(e)))
                     }
@@ -301,6 +381,7 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
     let sample = Rect::new(0, 0, 10, 10);
     let mut messages: Vec<(Paragraph, Rect)> = Default::default();
     let mut prev_y: u16 = 0;
+    let mut line_offset = 0;
     for msg in state.history.iter().chain(state.partial.iter()) {
         let role_block = Block::new()
             .title(Title::from(
@@ -313,10 +394,10 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
         let mut first_paragraph = true;
 
         for styled_paragraph in msg.display.iter() {
-            let paragraph = Paragraph::from(styled_paragraph);
             let (block, inner) = if first_paragraph {
                 let b = role_block.clone();
                 let inner = b.inner(sample);
+                // Role block adds one extra line
                 (b, inner)
             } else {
                 let b = Block::default();
@@ -324,7 +405,36 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
                 (b, inner)
             };
             first_paragraph = false;
-            let paragraph = paragraph.wrap(Wrap { trim: false }).block(block);
+
+            let mut lines = styled_paragraph.lines().collect::<Vec<_>>();
+            let (cursor_row, _) = state.cursor;
+            match &state.selection {
+                Some(selection) => {
+                    log::debug!("Has selection {:#?}", selection);
+                    lines.iter_mut().enumerate().for_each(|(idx, line)| {
+                        let global_idx = idx + line_offset;
+                        if selection.1.contains(&global_idx) {
+                            *line = line.clone().style(styled_paragraph.highlighted_style);
+                        }
+                    });
+                }
+                None => {
+                    if cursor_row >= line_offset && cursor_row < line_offset + lines.len() {
+                        let highlighted_line_idx = cursor_row - line_offset;
+                        lines[highlighted_line_idx] = lines[highlighted_line_idx]
+                            .clone()
+                            .style(styled_paragraph.highlighted_style);
+                    }
+                }
+            }
+            line_offset += lines.len();
+
+            let mut paragraph = Paragraph::new(lines)
+                .style(styled_paragraph.style)
+                .block(block);
+            if !styled_paragraph.is_empty_render() {
+                paragraph = paragraph.wrap(Wrap { trim: false });
+            }
 
             let inset = Inset::new(
                 inner.x,
@@ -342,8 +452,6 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
 
             messages.push((paragraph, text_area))
         }
-        // Make additional 1 point bottom offset
-        prev_y += 1;
     }
 
     let mut scroll_view = ScrollView::new(Size::new(

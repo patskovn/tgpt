@@ -53,7 +53,16 @@ impl IntermediateMarkdownPassResult {
                         let line = line.strip_suffix('\n').unwrap_or(line);
                         let line = line.strip_suffix('\r').unwrap_or(line);
 
-                        paragraph_line.push(StyledText::new(line.to_owned(), styled_text.style));
+                        if line.is_empty() && paragraph_line.is_empty() {
+                            collect_into(&mut all_paragraphs, &mut all_lines);
+                            all_paragraphs.push(StyledParagraph::empty());
+                            continue;
+                        }
+
+                        if paragraph_line.is_empty() || !line.is_empty() {
+                            paragraph_line
+                                .push(StyledText::new(line.to_owned(), styled_text.style));
+                        }
                         if has_newline {
                             collect_into(&mut all_lines, &mut paragraph_line);
                         }
@@ -68,6 +77,7 @@ impl IntermediateMarkdownPassResult {
         }
         collect_into(&mut all_lines, &mut paragraph_line);
         collect_into(&mut all_paragraphs, &mut all_lines);
+        all_paragraphs.push(StyledParagraph::empty());
 
         all_paragraphs
     }
@@ -86,7 +96,6 @@ fn highlight_syntax(language: Option<String>, content: String) -> StyledParagrap
         .iter()
         .find_map(|ext| syntax_set.find_syntax_by_extension(ext))
         .unwrap_or(syntax_set.find_syntax_plain_text());
-    log::debug!("Highlighting {:#?}: {:#?}", extensions, syntax.name);
 
     let mut h = HighlightLines::new(syntax, &theme_set.themes["base16-ocean.dark"]);
     let mut bg = ratatui::style::Color::DarkGray;
@@ -108,7 +117,11 @@ fn highlight_syntax(language: Option<String>, content: String) -> StyledParagrap
         })
         .collect();
 
-    StyledParagraph::new(lines, Style::default().bg(bg))
+    StyledParagraph::new(
+        lines,
+        Style::default().bg(bg),
+        Style::default().bg(ratatui::style::Color::DarkGray),
+    )
 }
 
 fn process_markdown(
@@ -136,8 +149,10 @@ fn process_markdown(
                 )]),
                 // Code contents
                 highlight_syntax(n.lang, n.value),
-                // Bottom fence + padding
-                StyledParagraph::from(vec![StyledLine::from("```"), StyledLine::from("")]),
+                // Bottom fence
+                StyledParagraph::from(StyledLine::from("```")),
+                // Padding newline should be in separate paragraph to properly support highlight!
+                StyledParagraph::from(StyledLine::from(" ")),
             ];
 
             result.push(IntermediateMarkdownPassResult::Code(all_paragraphs))

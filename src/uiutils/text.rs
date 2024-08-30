@@ -7,6 +7,12 @@ pub struct StyledText {
     pub style: Style,
 }
 
+impl StyledText {
+    fn is_empty_render(&self) -> bool {
+        self.content == " " || self.content.is_empty()
+    }
+}
+
 impl From<String> for StyledText {
     fn from(content: String) -> Self {
         Self::new(content, Default::default())
@@ -15,24 +21,39 @@ impl From<String> for StyledText {
 
 #[derive(Debug, PartialEq, Clone, Eq, Hash, new)]
 pub struct StyledLine {
-    content: Vec<StyledText>,
+    pub content: Vec<StyledText>,
+}
+
+impl StyledLine {
+    fn is_empty_render(&self) -> bool {
+        self.content.is_empty() || self.content.iter().all(|t| t.is_empty_render())
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Eq, Hash, new)]
 pub struct StyledParagraph {
     pub lines: Vec<StyledLine>,
     pub style: Style,
+    pub highlighted_style: Style,
 }
 
 impl From<Vec<StyledLine>> for StyledParagraph {
     fn from(lines: Vec<StyledLine>) -> Self {
-        Self::new(lines, Default::default())
+        Self::new(
+            lines,
+            Default::default(),
+            Style::default().bg(ratatui::style::Color::Gray),
+        )
     }
 }
 
 impl From<StyledLine> for StyledParagraph {
     fn from(line: StyledLine) -> Self {
-        Self::new(vec![line], Default::default())
+        Self::new(
+            vec![line],
+            Default::default(),
+            Style::default().bg(ratatui::style::Color::Gray),
+        )
     }
 }
 
@@ -46,8 +67,26 @@ where
 }
 
 impl StyledParagraph {
+    pub fn empty() -> Self {
+        Self::from(StyledLine::from(" "))
+    }
+
     pub fn append(&mut self, content: &mut Vec<StyledLine>) {
         self.lines.append(content)
+    }
+
+    pub fn lines(&self) -> impl Iterator<Item = ratatui::text::Line> {
+        self.lines.iter().map(ratatui::text::Line::from)
+    }
+
+    pub fn is_empty_render(&self) -> bool {
+        if self.lines.is_empty() {
+            true
+        } else if self.lines.len() == 1 {
+            self.lines[0].is_empty_render()
+        } else {
+            false
+        }
     }
 }
 
