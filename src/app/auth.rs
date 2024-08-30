@@ -91,7 +91,7 @@ impl Reducer<State<'_>, Action> for AuthReducer {
                         Effect::none()
                     }
                 },
-                list::Delegated::Toogle(_) => Effect::none(),
+                list::Delegated::Toogle => Effect::none(),
             },
             Action::List(action) => {
                 list::ListFeature::reduce(&mut state.providers, action).map(Action::List)

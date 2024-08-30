@@ -9,7 +9,7 @@ use tca::Effect;
 use crate::{
     gpt::openai::ChatGPTConfiguration,
     single_line_input,
-    uiutils::{centered_constraint, centered_pct},
+    uiutils::layout::{centered_constraint, centered_pct},
 };
 
 #[derive(Debug, Eq, PartialEq, Clone)]

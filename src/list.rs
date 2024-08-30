@@ -62,7 +62,7 @@ pub enum Action {
 #[derive(Debug)]
 pub enum Delegated {
     Noop(Event),
-    Toogle(usize),
+    Toogle,
     Enter(usize),
 }
 
@@ -106,9 +106,11 @@ where
                         );
                         Effect::none()
                     }
-                    KeyCode::Char(' ') => state.list_state.selected().map_or(Effect::none(), |s| {
-                        Effect::send(Action::Delegated(Delegated::Toogle(s)))
-                    }),
+                    KeyCode::Char(' ') => {
+                        state.list_state.selected().map_or(Effect::none(), |_s| {
+                            Effect::send(Action::Delegated(Delegated::Toogle))
+                        })
+                    }
                     KeyCode::Enter => state.list_state.selected().map_or(Effect::none(), |s| {
                         Effect::send(Action::Delegated(Delegated::Enter(s)))
                     }),

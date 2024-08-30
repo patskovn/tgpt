@@ -1,11 +1,14 @@
+use crate::uiutils::layout::Inset;
+use crate::uiutils::text::StyledParagraph;
+use crate::uiutils::text::StyledText;
 use crate::utils::chat_renderer::parse_markdown;
-use crate::utils::chat_renderer::MarkdownContent;
-use crate::utils::chat_renderer::StyledText;
+use crate::utils::chat_renderer::IntermediateMarkdownPassResult;
 use chatgpt::{
     prelude::Conversation,
     types::{ChatMessage, ResponseChunk},
 };
 use crossterm::event::{self, Event, KeyModifiers};
+use derive_new::new;
 use futures::StreamExt;
 use ratatui::{
     layout::{Constraint, Layout, Position, Rect, Size},
@@ -43,13 +46,13 @@ impl ScrollViewDiementions {
     }
 }
 
-#[derive(Debug, Clone)]
-struct DisplayableMessage<'a> {
+#[derive(Debug, Clone, new)]
+struct DisplayableMessage {
     original: ChatMessage,
-    display: Vec<MarkdownContent<'a>>,
+    display: Vec<StyledParagraph>,
 }
 
-impl PartialEq for DisplayableMessage<'_> {
+impl PartialEq for DisplayableMessage {
     fn eq(&self, other: &Self) -> bool {
         self.original == other.original
     }
@@ -61,8 +64,8 @@ pub struct State<'a> {
     current_focus: CurrentFocus,
     cursor: Option<(usize, usize)>,
     config: ChatGPTConfiguration,
-    history: Vec<DisplayableMessage<'a>>,
-    partial: Vec<DisplayableMessage<'a>>,
+    history: Vec<DisplayableMessage>,
+    partial: Vec<DisplayableMessage>,
     scroll_state: scroll_view::State,
     scroll_view_dimentions: Option<ScrollViewDiementions>,
     is_streaming: bool,
@@ -74,7 +77,7 @@ enum CurrentFocus {
     Chat,
 }
 
-const TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
+const _TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
 
 impl State<'_> {
     pub fn new(config: ChatGPTConfiguration) -> Self {
@@ -119,11 +122,9 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             Action::Delegated(_) => Effect::none(),
             Action::CommitMessage(msg) => {
                 state.partial = Default::default();
-                let parsed_content = parse_markdown(msg.content.clone());
-                state.history.push(DisplayableMessage {
-                    original: msg,
-                    display: parsed_content,
-                });
+                let markdown = parse_markdown(msg.content.clone());
+                let parahraphs = IntermediateMarkdownPassResult::into_paragraphs(markdown);
+                state.history.push(DisplayableMessage::new(msg, parahraphs));
 
                 Effect::none()
             }
@@ -132,10 +133,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     .into_iter()
                     .map(|original| {
                         let styled = StyledText::new(original.content.clone(), Style::default());
-                        DisplayableMessage {
-                            original,
-                            display: vec![MarkdownContent::StyledText(styled)],
-                        }
+                        let paragraphs = IntermediateMarkdownPassResult::into_paragraphs(vec![
+                            IntermediateMarkdownPassResult::StyledText(styled),
+                        ]);
+                        DisplayableMessage::new(original, paragraphs)
                     })
                     .collect();
                 Effect::none()
@@ -276,24 +277,6 @@ impl tca::Reducer<State<'_>, Action> for Feature {
     }
 }
 
-struct Inset {
-    left: u16,
-    top: u16,
-    right: u16,
-    bottom: u16,
-}
-
-impl Inset {
-    fn new(left: u16, top: u16, right: u16, bottom: u16) -> Self {
-        Self {
-            left,
-            top,
-            right,
-            bottom,
-        }
-    }
-}
-
 pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State, Action>) {
     let navigation = navigation::ui(navigation::CurrentScreen::Chat);
     let body = {
@@ -329,7 +312,8 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
 
         let mut first_paragraph = true;
 
-        for paragraph in MarkdownContent::into_paragraphs(msg.display.clone()).into_iter() {
+        for styled_paragraph in msg.display.iter() {
+            let paragraph = Paragraph::from(styled_paragraph);
             let (block, inner) = if first_paragraph {
                 let b = role_block.clone();
                 let inner = b.inner(sample);
