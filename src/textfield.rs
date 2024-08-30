@@ -1,5 +1,5 @@
 use crossterm::event::Event;
-use ratatui::widgets::{Block, Widget};
+use ratatui::widgets::Block;
 use tui_textarea::TextArea;
 
 use crate::editor::{self, Mode, Transition, Vim};
@@ -41,8 +41,8 @@ impl PartialEq for State<'_> {
 impl Eq for State<'_> {}
 
 impl<'a> State<'a> {
-    pub fn widget(&'a self) -> impl Widget + 'a {
-        self.textarea.widget()
+    pub fn widget(&'a self) -> &TextArea<'a> {
+        &self.textarea
     }
 
     pub fn new(block: Block<'a>) -> Self {

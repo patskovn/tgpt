@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::uiutils::layout::Inset;
 use crate::uiutils::text::StyledParagraph;
 use crate::uiutils::text::StyledText;
@@ -88,6 +90,7 @@ pub struct State<'a> {
     scroll_state: scroll_view::State,
     scroll_view_dimentions: Option<ScrollViewDiementions>,
     is_streaming: bool,
+    tooltip: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -111,6 +114,7 @@ impl State<'_> {
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
             is_streaming: false,
+            tooltip: None,
         }
     }
 }
@@ -126,6 +130,7 @@ pub enum Action {
     Delegated(Delegated),
     CommitMessage(ChatMessage),
     UpdatePartial(Vec<ChatMessage>),
+    SetTooltip(Option<String>),
 }
 
 #[derive(Debug)]
@@ -163,10 +168,12 @@ impl tca::Reducer<State<'_>, Action> for Feature {
         match action {
             Action::Delegated(_) => Effect::none(),
             Action::CommitMessage(msg) => {
+                state.selection = None;
                 state.partial = Default::default();
                 let markdown = parse_markdown(msg.content.clone());
                 let parahraphs = IntermediateMarkdownPassResult::into_paragraphs(markdown);
                 state.history.push(DisplayableMessage::new(msg, parahraphs));
+                state.cursor = (Feature::total_lines(state).saturating_sub(2), 0);
 
                 Effect::none()
             }
@@ -214,6 +221,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             Action::ScrollView(action) => {
                 scroll_view::Feature::reduce(&mut state.scroll_state, action)
                     .map(Action::ScrollView)
+            }
+            Action::SetTooltip(tooltip) => {
+                state.tooltip = tooltip;
+                Effect::none()
             }
             Action::ScrollViewDimentionsChanged(scroll_dimentions) => {
                 if Some(scroll_dimentions) == state.scroll_view_dimentions {
@@ -339,10 +350,16 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                                         });
                                     log::debug!("Clip {}", clipped_content);
                                     let _ = ctx.set_contents(clipped_content);
+                                    state.selection = None;
+                                    Effect::run(|sender| async move {
+                                        sender
+                                            .send(Action::SetTooltip(Some("Yanked!".to_string())));
+                                        tokio::time::sleep(Duration::from_secs(3)).await;
+                                        sender.send(Action::SetTooltip(None));
+                                    })
+                                } else {
+                                    Effect::none()
                                 }
-                                state.selection = None;
-
-                                Effect::none()
                             }
                             _ => Effect::send(Action::ScrollView(scroll_view::Action::Event(e))),
                         },
@@ -464,7 +481,8 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
 
     let mut renderable_state = state.scroll_state.scroll;
     let scroll_size = scroll_view.size();
-    let scroll_area = navigation.inner(body).as_size();
+    let chat_rect = navigation.inner(body);
+    let scroll_area = chat_rect.as_size();
     let scroll_dimentions = ScrollViewDiementions {
         frame_size: scroll_area,
         scroll_size,
@@ -475,7 +493,22 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
         y: std::cmp::min(renderable_state.offset().y, max_offset),
     });
 
-    frame.render_stateful_widget(scroll_view, navigation.inner(body), &mut renderable_state);
+    frame.render_stateful_widget(scroll_view, chat_rect, &mut renderable_state);
+
+    if let Some(tooltip) = &state.tooltip {
+        let tooltip_widget = Paragraph::new(tooltip.as_str())
+            .alignment(ratatui::layout::Alignment::Center)
+            .style(Style::default().green())
+            .block(
+                Block::default()
+                    .borders(Borders::all())
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().green()),
+            );
+        let width = tooltip_widget.line_width() as u16 + 2 + 2; // + block padding + padding
+        let rect = Rect::new(chat_rect.width - width, 1, width, 3);
+        frame.render_widget(tooltip_widget, rect);
+    }
 
     let navigation_style = if state.current_focus == CurrentFocus::Chat {
         Style::new().blue()
