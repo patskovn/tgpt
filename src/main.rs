@@ -63,7 +63,10 @@ async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                     break;
                 },
-                Err(err) => return Err(err.into()),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    // We can afford lagging behind, we will just redraw on next step
+                    continue;
+                },
                 }
             }
             maybe_event = crossterm_event => {

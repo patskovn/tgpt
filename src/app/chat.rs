@@ -90,7 +90,19 @@ pub struct State<'a> {
     scroll_state: scroll_view::State,
     scroll_view_dimentions: Option<ScrollViewDiementions>,
     is_streaming: bool,
-    tooltip: Option<String>,
+    tooltip: Option<Tooltip>,
+}
+
+#[derive(Debug, PartialEq, Clone, new)]
+pub struct Tooltip {
+    kind: TooltipKind,
+    text: String,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum TooltipKind {
+    Success,
+    Error,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -130,7 +142,8 @@ pub enum Action {
     Delegated(Delegated),
     CommitMessage(ChatMessage),
     UpdatePartial(Vec<ChatMessage>),
-    SetTooltip(Option<String>),
+    SetTooltip(Option<Tooltip>),
+    ScheduleTooltip(Tooltip),
 }
 
 #[derive(Debug)]
@@ -222,6 +235,11 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 scroll_view::Feature::reduce(&mut state.scroll_state, action)
                     .map(Action::ScrollView)
             }
+            Action::ScheduleTooltip(tooltip) => Effect::run(|sender| async move {
+                sender.send(Action::SetTooltip(Some(tooltip)));
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                sender.send(Action::SetTooltip(None));
+            }),
             Action::SetTooltip(tooltip) => {
                 state.tooltip = tooltip;
                 Effect::none()
@@ -274,14 +292,42 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                         } else {
                             Conversation::new_with_history(api.client, history)
                         };
-                        let mut stream =
-                            conversation.send_message_streaming(message).await.unwrap();
+                        let mut stream = match conversation.send_message_streaming(message).await {
+                            Ok(stream) => stream,
+                            Err(err) => {
+                                let tooltip = Tooltip::new(
+                                    TooltipKind::Error,
+                                    format!("Completion error: {}", err),
+                                );
+                                send.send(Action::ScheduleTooltip(tooltip));
+                                send.send(Action::StoppedStreaming);
+                                return;
+                            }
+                        };
 
                         let mut output: Vec<ResponseChunk> = Vec::new();
                         while let Some(chunk) = stream.next().await {
-                            output.push(chunk);
-                            let partial = ChatMessage::from_response_chunks(output.clone());
-                            send.send(Action::UpdatePartial(partial));
+                            match chunk {
+                                Ok(chunk) => {
+                                    output.push(chunk);
+                                    let partial = ChatMessage::from_response_chunks(output.clone());
+                                    send.send(Action::UpdatePartial(partial));
+                                }
+                                Err(err) => {
+                                    for message in
+                                        ChatMessage::from_response_chunks(output).into_iter()
+                                    {
+                                        send.send(Action::CommitMessage(message));
+                                    }
+                                    let tooltip = Tooltip::new(
+                                        TooltipKind::Error,
+                                        format!("Completion error: {}", err),
+                                    );
+                                    send.send(Action::ScheduleTooltip(tooltip));
+                                    send.send(Action::StoppedStreaming);
+                                    return;
+                                }
+                            }
                         }
                         for message in ChatMessage::from_response_chunks(output).into_iter() {
                             send.send(Action::CommitMessage(message));
@@ -352,10 +398,11 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                                     let _ = ctx.set_contents(clipped_content);
                                     state.selection = None;
                                     Effect::run(|sender| async move {
-                                        sender
-                                            .send(Action::SetTooltip(Some("Yanked!".to_string())));
-                                        tokio::time::sleep(Duration::from_secs(3)).await;
-                                        sender.send(Action::SetTooltip(None));
+                                        let tooltip = Tooltip::new(
+                                            TooltipKind::Success,
+                                            "Yanked!".to_string(),
+                                        );
+                                        sender.send(Action::ScheduleTooltip(tooltip));
                                     })
                                 } else {
                                     Effect::none()
@@ -374,7 +421,8 @@ impl tca::Reducer<State<'_>, Action> for Feature {
     }
 }
 
-pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State, Action>) {
+pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State, Action>) {
+    let state = store.state();
     let navigation = navigation::ui(navigation::CurrentScreen::Chat);
     let body = {
         let layout = Layout::default()
@@ -394,7 +442,7 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
         layout[0]
     };
 
-    let width = navigation.inner(body).width - 3;
+    let width = navigation.inner(body).width - 4;
     let sample = Rect::new(0, 0, 10, 10);
     let mut messages: Vec<(Paragraph, Rect)> = Default::default();
     let mut prev_y: u16 = 0;
@@ -496,9 +544,13 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
     frame.render_stateful_widget(scroll_view, chat_rect, &mut renderable_state);
 
     if let Some(tooltip) = &state.tooltip {
-        let tooltip_widget = Paragraph::new(tooltip.as_str())
+        let tooltip_style = match tooltip.kind {
+            TooltipKind::Success => Style::default().green(),
+            TooltipKind::Error => Style::default().red(),
+        };
+        let tooltip_widget = Paragraph::new(tooltip.text.as_str())
             .alignment(ratatui::layout::Alignment::Center)
-            .style(Style::default().green())
+            .style(tooltip_style)
             .block(
                 Block::default()
                     .borders(Borders::all())
