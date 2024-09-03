@@ -28,6 +28,7 @@ lazy_static! {
             "markdown".to_string() => vec!["md", "markdown"],
             "matlab".to_string() => vec!["m"],
             "objective-c".to_string() => vec!["m", "h"],
+            "objc".to_string() => vec!["m", "h"],
             "ocaml".to_string() => vec!["ml", "mli"],
             "pascal".to_string() => vec!["pas"],
             "perl".to_string() => vec!["pl", "pm"],
@@ -60,4 +61,3 @@ lazy_static! {
         }
     };
 }
-

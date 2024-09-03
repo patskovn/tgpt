@@ -1,3 +1,5 @@
+use crate::uiutils::dark_mode::is_dark_mode;
+use crate::uiutils::text::default_highlight_style;
 use crate::uiutils::text::StyledLine;
 use crate::uiutils::text::StyledParagraph;
 use crate::uiutils::text::StyledText;
@@ -116,12 +118,13 @@ fn highlight_syntax(language: Option<String>, content: String) -> StyledParagrap
             StyledLine::new(styled_text.collect())
         })
         .collect();
+    let highlight_style = if is_dark_mode() {
+        default_highlight_style()
+    } else {
+        Style::default().bg(ratatui::style::Color::DarkGray)
+    };
 
-    StyledParagraph::new(
-        lines,
-        Style::default().bg(bg),
-        Style::default().bg(ratatui::style::Color::DarkGray),
-    )
+    StyledParagraph::new(lines, Style::default().bg(bg), highlight_style)
 }
 
 fn process_markdown(

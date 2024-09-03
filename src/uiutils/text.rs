@@ -37,23 +37,24 @@ pub struct StyledParagraph {
     pub highlighted_style: Style,
 }
 
+pub fn default_highlight_style() -> Style {
+    Style::default().bg(if crate::uiutils::dark_mode::is_dark_mode() {
+        let gray = 88_u8;
+        ratatui::style::Color::Rgb(gray, gray, gray)
+    } else {
+        ratatui::style::Color::Gray
+    })
+}
+
 impl From<Vec<StyledLine>> for StyledParagraph {
     fn from(lines: Vec<StyledLine>) -> Self {
-        Self::new(
-            lines,
-            Default::default(),
-            Style::default().bg(ratatui::style::Color::Gray),
-        )
+        Self::new(lines, Default::default(), default_highlight_style())
     }
 }
 
 impl From<StyledLine> for StyledParagraph {
     fn from(line: StyledLine) -> Self {
-        Self::new(
-            vec![line],
-            Default::default(),
-            Style::default().bg(ratatui::style::Color::Gray),
-        )
+        Self::new(vec![line], Default::default(), default_highlight_style())
     }
 }
 
