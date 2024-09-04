@@ -13,6 +13,7 @@ pub struct State<'a> {
     pub navigation: navigation::State,
     pub chat: chat_loader::State<'a>,
     pub auth: auth::State<'a>,
+    size: (u16, u16),
 }
 
 impl<'a> Default for State<'a> {
@@ -21,6 +22,7 @@ impl<'a> Default for State<'a> {
             navigation: navigation::State::default(),
             chat: chat_loader::State::default(),
             auth: auth::State::new(),
+            size: Default::default(),
         }
     }
 }
@@ -67,6 +69,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                             Effect::send(Action::Config(auth::Action::Event(e)))
                         }
                     }
+                }
+                Event::Resize(w, h) => {
+                    state.size = (w, h);
+                    Effect::none()
                 }
                 _ => Effect::none(),
             },
