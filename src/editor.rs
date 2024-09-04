@@ -30,7 +30,11 @@ impl Mode {
             .border_type(BorderType::Rounded)
             .title(title)
             .title(
-                Title::from("[q] Hide field").position(ratatui::widgets::block::Position::Bottom),
+                Title::from("[q] Hide field ").position(ratatui::widgets::block::Position::Bottom),
+            )
+            .title(
+                Title::from(" [Tab] Toggle focus")
+                    .position(ratatui::widgets::block::Position::Bottom),
             )
     }
 
