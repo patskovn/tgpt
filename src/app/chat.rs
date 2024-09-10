@@ -11,11 +11,11 @@ use chatgpt::{
 };
 use clipboard::ClipboardContext;
 use clipboard::ClipboardProvider;
-use crossterm::event::KeyCode;
-use crossterm::event::KeyEvent;
-use crossterm::event::{self, Event, KeyModifiers};
 use derive_new::new;
 use futures::StreamExt;
+use ratatui::crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyEvent;
+use ratatui::crossterm::event::{self, Event, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout, Position, Rect, Size},
     style::{Style, Stylize},
@@ -121,7 +121,13 @@ impl State<'_> {
             cursor: (0, 0),
             selection: Default::default(),
             config,
-            history: vec![DisplayableMessage::from(TEST)],
+            history: vec![
+                DisplayableMessage::from(TEST),
+                DisplayableMessage::from(TEST),
+                DisplayableMessage::from(TEST),
+                DisplayableMessage::from(TEST),
+                DisplayableMessage::from(TEST),
+            ],
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -137,6 +143,7 @@ pub enum Action {
     TextField(textfield::Action),
     ScrollView(scroll_view::Action),
     ScrollViewDimentionsChanged(ScrollViewDiementions),
+    ScrollOffsetChanged(Position),
     BeganStreaming,
     StoppedStreaming,
     Delegated(Delegated),
@@ -207,14 +214,6 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 scroll_view::Delegated::Up => {
                     state.cursor.0 = state.cursor.0.saturating_sub(1);
                     Feature::update_selection(state);
-
-                    state.scroll_state.scroll.scroll_up();
-                    if let Some(scroll_dimentions) = state.scroll_view_dimentions {
-                        state.scroll_state.scroll.set_offset(
-                            scroll_dimentions
-                                .ensure_within_bounds(state.scroll_state.scroll.offset()),
-                        );
-                    }
                     Effect::none()
                 }
                 scroll_view::Delegated::Down => {
@@ -224,7 +223,6 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                         .saturating_add(1)
                         .min(Self::total_lines(state).saturating_sub(1));
                     Feature::update_selection(state);
-                    state.scroll_state.scroll.scroll_down();
                     Effect::none()
                 }
                 scroll_view::Delegated::Noop(e) => {
@@ -242,6 +240,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             }),
             Action::SetTooltip(tooltip) => {
                 state.tooltip = tooltip;
+                Effect::none()
+            }
+            Action::ScrollOffsetChanged(pos) => {
+                state.scroll_state.scroll.set_offset(pos);
                 Effect::none()
             }
             Action::ScrollViewDimentionsChanged(scroll_dimentions) => {
@@ -447,6 +449,7 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
     let mut messages: Vec<(Paragraph, Rect)> = Default::default();
     let mut prev_y: u16 = 0;
     let mut line_offset = 0;
+    let (cursor_row, _) = state.cursor;
     for msg in state.history.iter().chain(state.partial.iter()) {
         let role_block = Block::new()
             .title(Title::from(
@@ -472,10 +475,8 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
             first_paragraph = false;
 
             let mut lines = styled_paragraph.lines().collect::<Vec<_>>();
-            let (cursor_row, _) = state.cursor;
             match &state.selection {
                 Some(selection) => {
-                    log::debug!("Has selection {:#?}", selection);
                     lines.iter_mut().enumerate().for_each(|(idx, line)| {
                         let global_idx = idx + line_offset;
                         if selection.1.contains(&global_idx) {
@@ -540,6 +541,21 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
         x: 0,
         y: std::cmp::min(renderable_state.offset().y, max_offset),
     });
+    log::debug!(
+        "Scroll info. Cursor {}. Offset {}. Height: {}. Offset+Height {}.",
+        cursor_row,
+        renderable_state.offset().y,
+        scroll_area.height,
+        renderable_state.offset().y + scroll_area.height
+    );
+    if cursor_row < renderable_state.offset().y.into() {
+        renderable_state.set_offset(Position::new(0, cursor_row as u16));
+        store.send(Action::ScrollOffsetChanged(renderable_state.offset()));
+    } else if cursor_row > (renderable_state.offset().y + scroll_area.height).into() {
+        let new_y = (cursor_row as u16).saturating_sub(scroll_area.height);
+        renderable_state.set_offset(Position::new(0, new_y));
+        store.send(Action::ScrollOffsetChanged(renderable_state.offset()));
+    }
 
     frame.render_stateful_widget(scroll_view, chat_rect, &mut renderable_state);
 
@@ -570,6 +586,7 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
     frame.render_widget(navigation.border_style(navigation_style), body);
 
     if Some(scroll_dimentions) != state.scroll_view_dimentions {
+        log::debug!("Dimentions changed {:#?}", scroll_dimentions);
         store.send(Action::ScrollViewDimentionsChanged(scroll_dimentions));
     }
 }

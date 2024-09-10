@@ -1,6 +1,6 @@
-use crossterm::event::DisableMouseCapture;
-use crossterm::terminal::disable_raw_mode;
-use crossterm::{execute, terminal::LeaveAlternateScreen};
+use ratatui::crossterm::event::DisableMouseCapture;
+use ratatui::crossterm::terminal::disable_raw_mode;
+use ratatui::crossterm::{execute, terminal::LeaveAlternateScreen};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 pub fn initialize_panic_handler() -> anyhow::Result<()> {

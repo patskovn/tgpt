@@ -7,7 +7,7 @@ use ratatui::{
     widgets::{block::Title, Block, BorderType, Borders},
 };
 
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 
 use tca::Effect;
 

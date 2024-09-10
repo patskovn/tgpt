@@ -1,4 +1,5 @@
-use futures::{FutureExt, StreamExt};
+use futures::FutureExt;
+use futures::StreamExt;
 use tca::ActionSender;
 mod app;
 mod editor;
@@ -16,9 +17,9 @@ use std::fs::File;
 use std::io::{self};
 
 use anyhow::Context;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
-use crossterm::execute;
-use crossterm::terminal::{
+use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::prelude::Backend;

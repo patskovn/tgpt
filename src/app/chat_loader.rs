@@ -1,4 +1,4 @@
-use crossterm::event::Event;
+use ratatui::crossterm::event::Event;
 use ratatui::{layout::Rect, widgets::Paragraph, Frame};
 use tca::Effect;
 

@@ -1,7 +1,7 @@
 use std::cmp::{max, min};
 use tca::Effect;
 
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

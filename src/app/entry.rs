@@ -2,8 +2,8 @@ use crate::app::auth;
 use crate::app::chat_loader;
 use crate::app::navigation;
 use crate::navigation::CurrentScreen;
-use crossterm::event::Event;
-use crossterm::event::KeyEventKind;
+use ratatui::crossterm::event::Event;
+use ratatui::crossterm::event::KeyEventKind;
 use ratatui::Frame;
 use tca::Effect;
 use tca::Store;
@@ -100,10 +100,10 @@ pub fn ui(frame: &mut Frame, state: &State, store: Store<State, Action>) {
     match state.navigation.current_screen {
         CurrentScreen::Chat => chat_loader::ui(
             frame,
-            frame.size(),
+            frame.area(),
             &state.chat,
             store.scope(|s| &s.chat, Action::Chat),
         ),
-        CurrentScreen::Config => auth::ui(frame, frame.size(), &state.auth),
+        CurrentScreen::Config => auth::ui(frame, frame.area(), &state.auth),
     }
 }

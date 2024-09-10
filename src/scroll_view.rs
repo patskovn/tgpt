@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use tui_scrollview::ScrollViewState;
 
 use tca::{self, Effect};

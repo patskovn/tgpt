@@ -1,4 +1,4 @@
-use crossterm::event::Event;
+use ratatui::crossterm::event::Event;
 use ratatui::widgets::Block;
 use tui_textarea::TextArea;
 
@@ -92,7 +92,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     }
                     Transition::Nop => match event {
                         Event::Key(key) => match key.code {
-                            crossterm::event::KeyCode::Enter => {
+                            ratatui::crossterm::event::KeyCode::Enter => {
                                 Effect::send(Action::Delegated(Delegated::Commit))
                             }
                             _ => Effect::send(Action::Delegated(Delegated::Noop(event))),
