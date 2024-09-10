@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use crate::uiutils::layout::Inset;
+use crate::uiutils::reflow::LineComposer;
+use crate::uiutils::reflow::WordWrapper;
 use crate::uiutils::text::StyledParagraph;
 use crate::uiutils::text::StyledText;
 use crate::utils::chat_renderer::parse_markdown;
@@ -121,13 +122,7 @@ impl State<'_> {
             cursor: (0, 0),
             selection: Default::default(),
             config,
-            history: vec![
-                DisplayableMessage::from(TEST),
-                DisplayableMessage::from(TEST),
-                DisplayableMessage::from(TEST),
-                DisplayableMessage::from(TEST),
-                DisplayableMessage::from(TEST),
-            ],
+            history: vec![],
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -390,13 +385,15 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                                         .flat_map(|paragraph| paragraph.lines.iter())
                                         .enumerate()
                                         .filter(|(idx, _)| selection.1.contains(idx))
-                                        .fold(Default::default(), |mut acc, next| {
+                                        .fold(String::new(), |mut acc, next| {
                                             for entry in next.1.content.iter() {
                                                 acc.push_str(&entry.content);
                                             }
+                                            if !acc.ends_with('\n') {
+                                                acc.push('\n');
+                                            }
                                             acc
                                         });
-                                    log::debug!("Clip {}", clipped_content);
                                     let _ = ctx.set_contents(clipped_content);
                                     state.selection = None;
                                     Effect::run(|sender| async move {
@@ -423,6 +420,9 @@ impl tca::Reducer<State<'_>, Action> for Feature {
     }
 }
 
+const SCROLL_BAR_WIDTH: u16 = 1;
+const SCROLL_BAR_PADDING: u16 = 1;
+
 pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State, Action>) {
     let state = store.state();
     let navigation = navigation::ui(navigation::CurrentScreen::Chat);
@@ -444,11 +444,12 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
         layout[0]
     };
 
-    let width = navigation.inner(body).width - 4;
-    let sample = Rect::new(0, 0, 10, 10);
+    let width = navigation.inner(body).width - SCROLL_BAR_WIDTH - SCROLL_BAR_PADDING;
     let mut messages: Vec<(Paragraph, Rect)> = Default::default();
     let mut prev_y: u16 = 0;
     let mut line_offset = 0;
+    let mut rendered_line_offset = 0;
+    let mut resolved_rendered_cursor: Option<std::ops::RangeInclusive<u16>> = None;
     let (cursor_row, _) = state.cursor;
     for msg in state.history.iter().chain(state.partial.iter()) {
         let role_block = Block::new()
@@ -462,19 +463,19 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
         let mut first_paragraph = true;
 
         for styled_paragraph in msg.display.iter() {
-            let (block, inner) = if first_paragraph {
-                let b = role_block.clone();
-                let inner = b.inner(sample);
-                // Role block adds one extra line
-                (b, inner)
+            let block = if first_paragraph {
+                role_block.clone()
             } else {
-                let b = Block::default();
-                let inner = b.inner(sample);
-                (b, inner)
+                Block::default()
             };
-            first_paragraph = false;
 
             let mut lines = styled_paragraph.lines().collect::<Vec<_>>();
+            let focused_line =
+                if cursor_row >= line_offset && cursor_row < line_offset + lines.len() {
+                    Some(cursor_row - line_offset)
+                } else {
+                    None
+                };
             match &state.selection {
                 Some(selection) => {
                     lines.iter_mut().enumerate().for_each(|(idx, line)| {
@@ -485,14 +486,25 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
                     });
                 }
                 None => {
-                    if cursor_row >= line_offset && cursor_row < line_offset + lines.len() {
-                        let highlighted_line_idx = cursor_row - line_offset;
-                        lines[highlighted_line_idx] = lines[highlighted_line_idx]
+                    if let Some(focused_line) = focused_line {
+                        lines[focused_line] = lines[focused_line]
                             .clone()
                             .style(styled_paragraph.highlighted_style);
                     }
                 }
             }
+
+            let paragraph_text_width = width.max(0);
+
+            resolved_rendered_cursor = try_resolve_cursor_if_needed(
+                resolved_rendered_cursor,
+                &lines,
+                &mut rendered_line_offset,
+                first_paragraph,
+                focused_line,
+                paragraph_text_width,
+            );
+
             line_offset += lines.len();
 
             let mut paragraph = Paragraph::new(lines)
@@ -501,21 +513,11 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
             if !styled_paragraph.is_empty_render() {
                 paragraph = paragraph.wrap(Wrap { trim: false });
             }
-
-            let inset = Inset::new(
-                inner.x,
-                inner.y,
-                sample.width - inner.x - inner.width + 1,
-                sample.height - inner.y - inner.height,
-            );
-
-            let paragraph_text_width = std::cmp::max(0, width - inset.left - inset.right);
             let paragraph_text_height = paragraph.line_count(paragraph_text_width) as u16;
-            let height = paragraph_text_height + inset.top + inset.bottom;
-
+            let height = paragraph_text_height;
             let text_area = Rect::new(1, prev_y, width - 1, height);
             prev_y += height;
-
+            first_paragraph = false;
             messages.push((paragraph, text_area))
         }
     }
@@ -541,18 +543,19 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
         x: 0,
         y: std::cmp::min(renderable_state.offset().y, max_offset),
     });
-    log::debug!(
-        "Scroll info. Cursor {}. Offset {}. Height: {}. Offset+Height {}.",
-        cursor_row,
-        renderable_state.offset().y,
-        scroll_area.height,
-        renderable_state.offset().y + scroll_area.height
-    );
-    if cursor_row < renderable_state.offset().y.into() {
-        renderable_state.set_offset(Position::new(0, cursor_row as u16));
+    let resolved_cursor = resolved_rendered_cursor.unwrap_or(0..=0);
+    if *resolved_cursor.start() < renderable_state.offset().y {
+        let new_y = if *resolved_cursor.start() <= 1 {
+            // Special handling for first line that is block title that
+            // we need to show.
+            0
+        } else {
+            *resolved_cursor.end()
+        };
+        renderable_state.set_offset(Position::new(0, new_y));
         store.send(Action::ScrollOffsetChanged(renderable_state.offset()));
-    } else if cursor_row > (renderable_state.offset().y + scroll_area.height).into() {
-        let new_y = (cursor_row as u16).saturating_sub(scroll_area.height);
+    } else if *resolved_cursor.end() >= renderable_state.offset().y + scroll_area.height {
+        let new_y = resolved_cursor.end().saturating_sub(scroll_area.height) + 1;
         renderable_state.set_offset(Position::new(0, new_y));
         store.send(Action::ScrollOffsetChanged(renderable_state.offset()));
     }
@@ -586,7 +589,59 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
     frame.render_widget(navigation.border_style(navigation_style), body);
 
     if Some(scroll_dimentions) != state.scroll_view_dimentions {
-        log::debug!("Dimentions changed {:#?}", scroll_dimentions);
         store.send(Action::ScrollViewDimentionsChanged(scroll_dimentions));
     }
+}
+
+/// Resolving logical per-line cursor position to actual rendered cursor position
+/// respecting line wraps.
+/// TODO: Can we use wrapped lines to do the actual rendering to avoid recomputation?
+fn try_resolve_cursor_if_needed(
+    resolved_cursor: Option<std::ops::RangeInclusive<u16>>,
+    lines: &[ratatui::text::Line],
+    rendered_line_offset: &mut u16,
+    first_paragraph: bool,
+    focused_line: Option<usize>,
+    max_line_width: u16,
+) -> Option<std::ops::RangeInclusive<u16>> {
+    if resolved_cursor.is_some() {
+        return resolved_cursor;
+    }
+    if first_paragraph {
+        *rendered_line_offset += 1;
+    }
+    let mut upper_bound: u16 = 0;
+    for (idx, line) in lines.iter().enumerate() {
+        let is_focused_line = Some(idx) == focused_line;
+        if is_focused_line {
+            // Records drawed beginning position of cursor
+            upper_bound = *rendered_line_offset;
+        }
+        if line.spans.len() == 1 && line.spans[0].content == " " {
+            *rendered_line_offset += 1;
+        } else {
+            let line_ref = [line];
+            let graphemes = line_ref.iter().map(|line| {
+                let graphemes = line
+                    .spans
+                    .iter()
+                    .flat_map(|span| span.styled_graphemes(line.style));
+                let alignment = line.alignment.unwrap_or(ratatui::layout::Alignment::Left);
+                (graphemes, alignment)
+            });
+            let mut line_composer = WordWrapper::new(graphemes, max_line_width, false);
+
+            while line_composer.next_line().is_some() {
+                *rendered_line_offset += 1;
+            }
+        }
+        if is_focused_line {
+            // Records drawed end position of cursor. It is different for lines
+            // that wrap.
+            let lower_bound = *rendered_line_offset - 1;
+            return Some(upper_bound..=lower_bound);
+        }
+    }
+
+    None
 }

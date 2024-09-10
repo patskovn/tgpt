@@ -13,7 +13,6 @@ use syntect::util::LinesWithEndings;
 
 pub fn parse_markdown(message: String) -> Vec<IntermediateMarkdownPassResult> {
     let root_node = markdown::to_mdast(&message, &markdown_parse_options()).unwrap();
-    log::debug!("Parsed markdown {:#?}", root_node);
     let mut result: Vec<IntermediateMarkdownPassResult> = Default::default();
     process_markdown(root_node, &Default::default(), &mut result);
 

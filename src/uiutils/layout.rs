@@ -1,4 +1,3 @@
-use derive_new::new;
 use ratatui::layout::{Constraint, Layout, Rect};
 
 pub fn centered_pct(r: Rect, direction: ratatui::layout::Direction, percent: u16) -> Rect {
@@ -21,12 +20,4 @@ pub fn centered_constraint(
         .direction(direction)
         .constraints([Constraint::Fill(1), constraint, Constraint::Fill(1)])
         .split(r)[1]
-}
-
-#[derive(new)]
-pub struct Inset {
-    pub left: u16,
-    pub top: u16,
-    pub right: u16,
-    pub bottom: u16,
 }

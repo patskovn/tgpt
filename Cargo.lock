@@ -1983,6 +1983,8 @@ dependencies = [
  "trace",
  "tui-scrollview",
  "tui-textarea",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]
