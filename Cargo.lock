@@ -229,9 +229,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "chatgpt_rs"
-version = "1.2.3"
-source = "git+https://github.com/patskovn/chatgpt_rs.git?branch=master#ad6affc8623af8274251926bcfd639238cac013d"
+name = "chatgpt_rs_fork"
+version = "1.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90bb369f81095bf15cb9a2cb5e7155c9e1f705963794f33dfb8cedd618175000"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -1957,7 +1958,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "better-panic",
- "chatgpt_rs",
+ "chatgpt_rs_fork",
  "clipboard",
  "cocoa",
  "color-eyre",
