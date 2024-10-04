@@ -2,6 +2,7 @@ use crate::app::auth;
 use crate::app::chat_loader;
 use crate::app::navigation;
 use crate::navigation::CurrentScreen;
+use crossterm::event::KeyEvent;
 use ratatui::crossterm::event::Event;
 use ratatui::crossterm::event::KeyEventKind;
 use ratatui::Frame;
@@ -60,16 +61,16 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 chat_loader::Feature::reduce(&mut state.chat, action).map(Action::Chat)
             }
             Action::Event(e) => match e {
-                Event::Key(key) if key.kind != KeyEventKind::Release => {
-                    match state.navigation.current_screen {
-                        CurrentScreen::Chat => {
-                            Effect::send(Action::Chat(chat_loader::Action::Event(e)))
-                        }
-                        CurrentScreen::Config => {
-                            Effect::send(Action::Config(auth::Action::Event(e)))
-                        }
+                Event::Paste(_)
+                | Event::Key(KeyEvent {
+                    kind: KeyEventKind::Press | KeyEventKind::Release,
+                    ..
+                }) => match state.navigation.current_screen {
+                    CurrentScreen::Chat => {
+                        Effect::send(Action::Chat(chat_loader::Action::Event(e)))
                     }
-                }
+                    CurrentScreen::Config => Effect::send(Action::Config(auth::Action::Event(e))),
+                },
                 Event::Resize(w, h) => {
                     state.size = (w, h);
                     Effect::none()
@@ -78,7 +79,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             },
             Action::Navigation(action) => match action {
                 navigation::Action::Delegated(delegated) => match delegated {
-                    navigation::DelegatedAction::Noop(_) => Effect::none(),
+                    navigation::DelegatedAction::Noop => Effect::none(),
                     navigation::DelegatedAction::ChangeScreen(screen) => {
                         state.navigation.current_screen = screen;
                         match screen {

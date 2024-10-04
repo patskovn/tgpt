@@ -76,8 +76,16 @@ pub struct Feature {}
 impl tca::Reducer<State<'_>, Action> for Feature {
     fn reduce(state: &mut State, action: Action) -> Effect<Action> {
         match action {
-            Action::Event(event) => {
-                match state
+            Action::Event(event) => match event {
+                Event::Paste(paste) => match state.editor.mode {
+                    Mode::Insert => {
+                        log::debug!("PASTE {}", paste);
+                        state.textarea.insert_str(paste);
+                        Effect::none()
+                    }
+                    _ => Effect::none(),
+                },
+                _ => match state
                     .editor
                     .transition(event.clone().into(), &mut state.textarea)
                 {
@@ -104,8 +112,8 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     }
                     Transition::Mode(_) => Effect::none(),
                     Transition::Quit => Effect::send(Action::Delegated(Delegated::Quit)),
-                }
-            }
+                },
+            },
             Action::Delegated(_) => Effect::none(),
         }
     }

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::uiutils::moves;
 use crate::uiutils::reflow::LineComposer;
 use crate::uiutils::reflow::WordWrapper;
 use crate::uiutils::text::StyledParagraph;
@@ -17,6 +18,8 @@ use futures::StreamExt;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::crossterm::event::{self, Event, KeyModifiers};
+use ratatui::text::Line;
+use ratatui::text::Span;
 use ratatui::{
     layout::{Constraint, Layout, Position, Rect, Size},
     style::{Style, Stylize},
@@ -66,6 +69,7 @@ impl PartialEq for DisplayableMessage {
 }
 
 impl DisplayableMessage {
+    #[allow(dead_code)]
     fn from(text: &str) -> Self {
         Self {
             original: ChatMessage {
@@ -83,8 +87,8 @@ impl DisplayableMessage {
 pub struct State<'a> {
     textarea: textfield::State<'a>,
     current_focus: CurrentFocus,
-    cursor: (usize, usize),
-    selection: Option<(usize, std::ops::RangeInclusive<usize>)>,
+    cursor: CursorPosition,
+    selection: Option<Selection>,
     config: ChatGPTConfiguration,
     history: Vec<DisplayableMessage>,
     partial: Vec<DisplayableMessage>,
@@ -92,6 +96,39 @@ pub struct State<'a> {
     scroll_view_dimentions: Option<ScrollViewDiementions>,
     is_streaming: bool,
     tooltip: Option<Tooltip>,
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, new)]
+struct CursorPosition {
+    row: usize,
+    col: usize,
+}
+
+impl Ord for CursorPosition {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.row.cmp(&other.row).then(self.col.cmp(&other.col))
+    }
+}
+
+impl PartialOrd for CursorPosition {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, new)]
+struct ConcreteSelection<Idx> {
+    start: Idx,
+    range: std::ops::RangeInclusive<Idx>,
+}
+
+type LineSelection = ConcreteSelection<usize>;
+type CharSelection = ConcreteSelection<CursorPosition>;
+
+#[derive(Debug, PartialEq, Clone)]
+enum Selection {
+    Line(LineSelection),
+    Char(CharSelection),
 }
 
 #[derive(Debug, PartialEq, Clone, new)]
@@ -112,6 +149,7 @@ enum CurrentFocus {
     Chat,
 }
 
+#[allow(dead_code)]
 const TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
 
 impl State<'_> {
@@ -119,10 +157,13 @@ impl State<'_> {
         Self {
             textarea: textfield::State::default(),
             current_focus: CurrentFocus::TextArea,
-            cursor: (0, 0),
+            cursor: CursorPosition::new(0, 0),
             selection: Default::default(),
             config,
-            history: vec![],
+            history: vec![
+                DisplayableMessage::from(TEST),
+                DisplayableMessage::from(TEST),
+            ],
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -136,7 +177,7 @@ impl State<'_> {
 pub enum Action {
     Event(Event),
     TextField(textfield::Action),
-    ScrollView(scroll_view::Action),
+    Move(moves::Action),
     ScrollViewDimentionsChanged(ScrollViewDiementions),
     ScrollOffsetChanged(Position),
     BeganStreaming,
@@ -167,13 +208,102 @@ impl Feature {
             .count()
     }
 
+    fn line_width<'a>(state: &'a State<'a>, idx: usize) -> Option<usize> {
+        state
+            .history
+            .iter()
+            .chain(state.partial.iter())
+            .flat_map(|d| d.display.iter())
+            .flat_map(|p| p.lines())
+            .nth(idx)
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .fold(0, |length, span| length + span.content.len())
+            })
+    }
+
+    fn update_cursor(state: &mut State) {
+        if let Some(focused_line_width) = Self::line_width(state, state.cursor.row) {
+            if focused_line_width < state.cursor.col {
+                state.cursor.col = focused_line_width;
+                // To account for newline symbol
+                state.cursor.col = state.cursor.col.saturating_sub(1);
+            }
+        }
+    }
+
     fn update_selection(state: &mut State) {
-        if let Some(ref mut selection) = state.selection {
-            selection.1 = match selection.0.cmp(&state.cursor.0) {
-                std::cmp::Ordering::Less => selection.0..=state.cursor.0,
-                std::cmp::Ordering::Equal => state.cursor.0..=state.cursor.0,
-                std::cmp::Ordering::Greater => state.cursor.0..=selection.0,
-            };
+        match state.selection {
+            Some(Selection::Line(ref mut selection)) => {
+                Self::compare_and_update_selection(state.cursor.row, selection);
+            }
+            Some(Selection::Char(ref mut selection)) => {
+                Self::compare_and_update_selection(state.cursor, selection);
+            }
+            None => {}
+        }
+    }
+
+    fn compare_and_update_selection<T: Ord + Copy>(
+        cursor: T,
+        selection: &mut ConcreteSelection<T>,
+    ) {
+        selection.range = match selection.start.cmp(&cursor) {
+            std::cmp::Ordering::Less => selection.start..=cursor,
+            std::cmp::Ordering::Equal => cursor..=cursor,
+            std::cmp::Ordering::Greater => cursor..=selection.start,
+        };
+    }
+
+    fn selected_text(state: &State) -> Option<String> {
+        let selection = if let Some(selection) = &state.selection {
+            selection
+        } else {
+            return None;
+        };
+        let lines = state
+            .history
+            .iter()
+            .chain(state.partial.iter())
+            .flat_map(|d| d.display.iter())
+            .flat_map(|paragraph| paragraph.lines.iter())
+            .enumerate();
+        match selection {
+            Selection::Line(line_selection) => Some(
+                lines
+                    .filter(|(idx, _)| line_selection.range.contains(idx))
+                    .fold(String::new(), |mut acc, next| {
+                        for entry in next.1.content.iter() {
+                            acc.push_str(&entry.content);
+                        }
+                        if !acc.ends_with('\n') {
+                            acc.push('\n');
+                        }
+                        acc
+                    }),
+            ),
+            Selection::Char(char_selection) => {
+                let mut result = "".to_string();
+                for (line_idx, line) in lines {
+                    for (col_idx, letter) in line
+                        .content
+                        .iter()
+                        .flat_map(|t| t.content.chars())
+                        .enumerate()
+                    {
+                        let position = CursorPosition::new(line_idx, col_idx);
+                        if char_selection.range.contains(&position) {
+                            result.push(letter);
+                        }
+                    }
+
+                    if !result.ends_with('\n') {
+                        result.push('\n');
+                    }
+                }
+                Some(result)
+            }
         }
     }
 }
@@ -188,7 +318,8 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                 let markdown = parse_markdown(msg.content.clone());
                 let parahraphs = IntermediateMarkdownPassResult::into_paragraphs(markdown);
                 state.history.push(DisplayableMessage::new(msg, parahraphs));
-                state.cursor = (Feature::total_lines(state).saturating_sub(2), 0);
+                state.cursor =
+                    CursorPosition::new(Feature::total_lines(state).saturating_sub(2), 0);
 
                 Effect::none()
             }
@@ -205,29 +336,36 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     .collect();
                 Effect::none()
             }
-            Action::ScrollView(scroll_view::Action::Delegated(delegated)) => match delegated {
-                scroll_view::Delegated::Up => {
-                    state.cursor.0 = state.cursor.0.saturating_sub(1);
+            Action::Move(moves::Action::Delegated(delegated)) => match delegated {
+                moves::Delegated::Up => {
+                    state.cursor.row = state.cursor.row.saturating_sub(1);
                     Feature::update_selection(state);
                     Effect::none()
                 }
-                scroll_view::Delegated::Down => {
-                    state.cursor.0 = state
+                moves::Delegated::Down => {
+                    state.cursor.row = state
                         .cursor
-                        .0
+                        .row
                         .saturating_add(1)
                         .min(Self::total_lines(state).saturating_sub(1));
                     Feature::update_selection(state);
                     Effect::none()
                 }
-                scroll_view::Delegated::Noop(e) => {
-                    Effect::send(Action::Delegated(Delegated::Noop(e)))
+                moves::Delegated::Left => {
+                    Self::update_cursor(state);
+                    state.cursor.col = state.cursor.col.saturating_sub(1);
+                    Feature::update_selection(state);
+                    Effect::none()
                 }
+                moves::Delegated::Right => {
+                    state.cursor.col = state.cursor.col.saturating_add(1);
+                    Self::update_cursor(state);
+                    Feature::update_selection(state);
+                    Effect::none()
+                }
+                moves::Delegated::Noop(e) => Effect::send(Action::Delegated(Delegated::Noop(e))),
             },
-            Action::ScrollView(action) => {
-                scroll_view::Feature::reduce(&mut state.scroll_state, action)
-                    .map(Action::ScrollView)
-            }
+            Action::Move(action) => moves::Feature::reduce(&mut (), action).map(Action::Move),
             Action::ScheduleTooltip(tooltip) => Effect::run(|sender| async move {
                 sender.send(Action::SetTooltip(Some(tooltip)));
                 tokio::time::sleep(Duration::from_secs(3)).await;
@@ -364,36 +502,29 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     CurrentFocus::Chat => match e {
                         Event::Key(key) if key.kind == event::KeyEventKind::Press => match key.code
                         {
-                            KeyCode::Char('v') => {
+                            KeyCode::Char('v') | KeyCode::Char('V') => {
                                 if state.selection.is_some() {
                                     state.selection = None;
                                 } else {
-                                    state.selection =
-                                        Some((state.cursor.0, state.cursor.0..=state.cursor.0));
+                                    let selection = if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                        Selection::Line(LineSelection::new(
+                                            state.cursor.row,
+                                            state.cursor.row..=state.cursor.row,
+                                        ))
+                                    } else {
+                                        Selection::Char(CharSelection::new(
+                                            state.cursor,
+                                            state.cursor..=state.cursor,
+                                        ))
+                                    };
+                                    state.selection = Some(selection);
                                 }
                                 Effect::none()
                             }
                             KeyCode::Char('y') => {
-                                if let Some(selection) = &state.selection {
+                                if let Some(clipped_content) = Self::selected_text(state) {
                                     let mut ctx: ClipboardContext =
                                         ClipboardProvider::new().unwrap();
-                                    let clipped_content: String = state
-                                        .history
-                                        .iter()
-                                        .chain(state.partial.iter())
-                                        .flat_map(|d| d.display.iter())
-                                        .flat_map(|paragraph| paragraph.lines.iter())
-                                        .enumerate()
-                                        .filter(|(idx, _)| selection.1.contains(idx))
-                                        .fold(String::new(), |mut acc, next| {
-                                            for entry in next.1.content.iter() {
-                                                acc.push_str(&entry.content);
-                                            }
-                                            if !acc.ends_with('\n') {
-                                                acc.push('\n');
-                                            }
-                                            acc
-                                        });
                                     let _ = ctx.set_contents(clipped_content);
                                     state.selection = None;
                                     Effect::run(|sender| async move {
@@ -407,9 +538,9 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                                     Effect::none()
                                 }
                             }
-                            _ => Effect::send(Action::ScrollView(scroll_view::Action::Event(e))),
+                            _ => Effect::send(Action::Move(moves::Action::Event(e))),
                         },
-                        _ => Effect::send(Action::ScrollView(scroll_view::Action::Event(e))),
+                        _ => Effect::send(Action::Move(moves::Action::Event(e))),
                     },
                     CurrentFocus::TextArea => {
                         Effect::send(Action::TextField(textfield::Action::Event(e)))
@@ -450,7 +581,6 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
     let mut line_offset = 0;
     let mut rendered_line_offset = 0;
     let mut resolved_rendered_cursor: Option<std::ops::RangeInclusive<u16>> = None;
-    let (cursor_row, _) = state.cursor;
     for msg in state.history.iter().chain(state.partial.iter()) {
         let role_block = Block::new()
             .title(Title::from(
@@ -470,26 +600,77 @@ pub fn ui(frame: &mut Frame, area: Rect, _state: &State, store: tca::Store<State
             };
 
             let mut lines = styled_paragraph.lines().collect::<Vec<_>>();
-            let focused_line =
-                if cursor_row >= line_offset && cursor_row < line_offset + lines.len() {
-                    Some(cursor_row - line_offset)
-                } else {
-                    None
-                };
+            let focused_line = if state.cursor.row >= line_offset
+                && state.cursor.row < line_offset + lines.len()
+            {
+                Some(state.cursor.row - line_offset)
+            } else {
+                None
+            };
             match &state.selection {
-                Some(selection) => {
+                Some(Selection::Line(selection)) => {
                     lines.iter_mut().enumerate().for_each(|(idx, line)| {
                         let global_idx = idx + line_offset;
-                        if selection.1.contains(&global_idx) {
+                        if selection.range.contains(&global_idx) {
                             *line = line.clone().style(styled_paragraph.highlighted_style);
                         }
                     });
                 }
+                Some(Selection::Char(selection)) => {
+                    let first_global_line_idx = line_offset;
+                    let last_global_line_idx = lines.len().saturating_sub(1);
+
+                    let participates_in_selection = (selection.range.start().row
+                        <= first_global_line_idx
+                        && first_global_line_idx <= selection.range.end().row)
+                        || (selection.range.start().row <= last_global_line_idx
+                            && last_global_line_idx <= selection.range.end().row);
+
+                    if participates_in_selection {
+                        let mut selected_lines: Vec<Line> = vec![];
+                        for (local_line_idx, line) in lines.iter_mut().enumerate() {
+                            let mut edited_line = Line::styled("", line.style);
+                            let line_idx = local_line_idx + line_offset;
+                            for (col_idx, grapheme) in line.styled_graphemes(line.style).enumerate()
+                            {
+                                let position = CursorPosition::new(line_idx, col_idx);
+
+                                let style = if selection.range.contains(&position) {
+                                    grapheme.style.patch(styled_paragraph.highlighted_style)
+                                } else {
+                                    grapheme.style
+                                };
+                                edited_line
+                                    .push_span(Span::styled(grapheme.symbol.to_owned(), style));
+                            }
+                            selected_lines.push(edited_line);
+                        }
+                        lines = selected_lines;
+                    }
+                }
                 None => {
                     if let Some(focused_line) = focused_line {
-                        lines[focused_line] = lines[focused_line]
-                            .clone()
-                            .style(styled_paragraph.highlighted_style);
+                        let focused_line_style = lines[focused_line].style;
+                        let mut line = Line::styled("", focused_line_style);
+                        let words_count = lines[focused_line].to_string().len();
+                        let cursor_col = if state.cursor.col >= words_count {
+                            (words_count - 1).max(0)
+                        } else {
+                            state.cursor.col
+                        };
+
+                        for (idx, grapheme) in lines[focused_line]
+                            .styled_graphemes(focused_line_style)
+                            .enumerate()
+                        {
+                            let style = if idx == cursor_col {
+                                grapheme.style.patch(styled_paragraph.highlighted_style)
+                            } else {
+                                grapheme.style
+                            };
+                            line.push_span(Span::styled(grapheme.symbol.to_owned(), style));
+                        }
+                        lines[focused_line] = line;
                     }
                 }
             }

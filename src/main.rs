@@ -1,3 +1,6 @@
+use crossterm::event::DisableBracketedPaste;
+use crossterm::event::EnableBracketedPaste;
+use crossterm::event::Event;
 use futures::FutureExt;
 use futures::StreamExt;
 use tca::ActionSender;
@@ -41,6 +44,13 @@ fn configure_logger() -> anyhow::Result<()> {
     .context("Failed to configure logging")
 }
 
+fn fixup_event(event: Event) -> Event {
+    match event {
+        Event::Paste(paste) => Event::Paste(paste.replace('\r', "\n")),
+        _ => event,
+    }
+}
+
 async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()> {
     let store = tca::Store::new::<Feature>(State::default());
     store.send(Action::Navigation(navigation::Action::Delegated(
@@ -72,7 +82,7 @@ async fn event_loop<B: Backend>(terminal: &mut Terminal<B>) -> anyhow::Result<()
             }
             maybe_event = crossterm_event => {
                 match maybe_event {
-                    Some(Ok(evt)) => store.send(Action::Event(evt)),
+                    Some(Ok(evt)) => store.send(Action::Event(fixup_event(evt))),
                     Some(Err(err)) => return Err(err.into()),
                     None => continue,
                 }
@@ -90,7 +100,12 @@ async fn main() -> anyhow::Result<()> {
     enable_raw_mode()?;
 
     let mut stderr = io::stderr();
-    execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        stderr,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
     let backend = CrosstermBackend::new(stderr);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -101,7 +116,8 @@ async fn main() -> anyhow::Result<()> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
+        DisableMouseCapture,
+        DisableBracketedPaste,
     )?;
     terminal.show_cursor()?;
 

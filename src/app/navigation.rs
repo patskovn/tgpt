@@ -51,7 +51,7 @@ pub enum Action {
 
 #[derive(Debug)]
 pub enum DelegatedAction {
-    Noop(Event),
+    Noop,
     ChangeScreen(CurrentScreen),
     Exit,
 }
@@ -73,10 +73,10 @@ impl tca::Reducer<State, Action> for NavigationReducer {
                         Result::Ok(screen) => {
                             Effect::send(Action::Delegated(DelegatedAction::ChangeScreen(screen)))
                         }
-                        Result::Err(_) => Effect::send(Action::Delegated(DelegatedAction::Noop(e))),
+                        Result::Err(_) => Effect::send(Action::Delegated(DelegatedAction::Noop)),
                     },
                 },
-                _ => Effect::send(Action::Delegated(DelegatedAction::Noop(e))),
+                _ => Effect::send(Action::Delegated(DelegatedAction::Noop)),
             },
         }
     }
