@@ -160,10 +160,7 @@ impl State<'_> {
             cursor: CursorPosition::new(0, 0),
             selection: Default::default(),
             config,
-            history: vec![
-                DisplayableMessage::from(TEST),
-                DisplayableMessage::from(TEST),
-            ],
+            history: vec![],
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),

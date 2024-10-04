@@ -231,6 +231,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chatgpt_rs"
 version = "1.2.3"
+source = "git+https://github.com/patskovn/chatgpt_rs.git?branch=master#ad6affc8623af8274251926bcfd639238cac013d"
 dependencies = [
  "bytes",
  "derive_builder",
