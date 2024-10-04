@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Nikita Patskov <patskovn@gmail.com>"]
 homepage = "https://tgpt.app/"
+description = "Terminal ui application for talking to LLMs"
+license = "MIT"
 
 [dependencies]
 tca-rs = "0.1.0"
