@@ -92,7 +92,7 @@ pub fn ui<'a>(current_screen: CurrentScreen) -> Block<'a> {
 
 fn title<'a>(screen: CurrentScreen, current_screen: CurrentScreen, index: u8) -> Title<'a> {
     let style = if screen == current_screen {
-        Style::new().green()
+        Style::new().blue()
     } else {
         Style::default()
     };

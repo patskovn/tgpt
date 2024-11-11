@@ -31,6 +31,7 @@ pub enum Action {
 #[derive(Debug)]
 pub enum Delegated {
     Noop(Event),
+    Quit,
 }
 
 #[derive(Default)]
@@ -45,6 +46,7 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             },
             Action::Chat(chat::Action::Delegated(delegated)) => match delegated {
                 chat::Delegated::Noop(e) => Effect::send(Action::Delegated(Delegated::Noop(e))),
+                chat::Delegated::Quit => Effect::send(Action::Delegated(Delegated::Quit)),
             },
             Action::Chat(action) => match state {
                 State::Chat(chat_state) => {
@@ -54,10 +56,16 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             },
             Action::Delegated(_) => Effect::none(),
             Action::ReloadConfig => match gpt::openai::ChatGPTConfiguration::open() {
-                Some(config) => {
-                    *state = State::Chat(chat::State::new(config));
-                    Effect::none()
-                }
+                Some(config) => match state {
+                    State::None => {
+                        *state = State::Chat(chat::State::new(config));
+                        Effect::none()
+                    }
+                    State::Chat(ref mut chat) => {
+                        chat.update_config(config);
+                        Effect::none()
+                    }
+                },
                 None => Effect::none(),
             },
         }
@@ -74,8 +82,8 @@ pub fn ui(frame: &mut Frame, area: Rect, state: &State, store: tca::Store<State,
                 area,
             );
         }
-        State::Chat(chat) => {
-            chat::ui(frame, area, chat, store.scope(|s| s.chat(), Action::Chat));
+        State::Chat(_) => {
+            chat::ui(frame, area, store.scope(|s| s.chat(), Action::Chat));
         }
     }
 }
