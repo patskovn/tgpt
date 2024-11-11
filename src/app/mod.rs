@@ -4,5 +4,6 @@ pub mod chat_gpt_configuration;
 pub mod chat_loader;
 pub mod conversation;
 pub mod conversation_input;
+pub mod conversation_list;
 pub mod entry;
 pub mod navigation;

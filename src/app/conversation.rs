@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::uiutils::moves;
@@ -19,6 +20,7 @@ use ratatui::crossterm::event::KeyCode;
 use ratatui::crossterm::event::{self, Event, KeyModifiers};
 use ratatui::text::Line;
 use ratatui::text::Span;
+use ratatui::widgets::BorderType;
 use ratatui::{
     layout::{Position, Rect, Size},
     style::{Style, Stylize},
@@ -30,10 +32,11 @@ use tca::Effect;
 use tui_scrollview::ScrollView;
 
 use crate::{
-    app::navigation,
     gpt::openai::{Api, ChatGPTConfiguration},
     scroll_view,
 };
+
+use super::chat::CurrentFocus;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct ScrollViewDiementions {
@@ -55,7 +58,7 @@ impl ScrollViewDiementions {
 }
 
 #[derive(Debug, Clone, new)]
-struct DisplayableMessage {
+pub struct DisplayableMessage {
     original: ChatMessage,
     display: Vec<StyledParagraph>,
 }
@@ -83,20 +86,20 @@ impl DisplayableMessage {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
-    cursor: CursorPosition,
-    selection: Option<Selection>,
+    pub cursor: CursorPosition,
+    pub selection: Option<Selection>,
     pub config: ChatGPTConfiguration,
-    history: Vec<DisplayableMessage>,
-    partial: Vec<DisplayableMessage>,
-    scroll_state: scroll_view::State,
-    scroll_view_dimentions: Option<ScrollViewDiementions>,
+    pub history: Vec<DisplayableMessage>,
+    pub partial: Vec<DisplayableMessage>,
+    pub scroll_state: scroll_view::State,
+    pub scroll_view_dimentions: Option<ScrollViewDiementions>,
     pub is_streaming: bool,
-    tooltip: Option<Tooltip>,
-    pub focused: bool,
+    pub tooltip: Option<Tooltip>,
+    pub current_focus: Arc<CurrentFocus>,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, new)]
-struct CursorPosition {
+pub struct CursorPosition {
     row: usize,
     col: usize,
 }
@@ -114,16 +117,16 @@ impl PartialOrd for CursorPosition {
 }
 
 #[derive(Debug, PartialEq, Clone, new)]
-struct ConcreteSelection<Idx> {
+pub struct ConcreteSelection<Idx> {
     start: Idx,
     range: std::ops::RangeInclusive<Idx>,
 }
 
-type LineSelection = ConcreteSelection<usize>;
-type CharSelection = ConcreteSelection<CursorPosition>;
+pub type LineSelection = ConcreteSelection<usize>;
+pub type CharSelection = ConcreteSelection<CursorPosition>;
 
 #[derive(Debug, PartialEq, Clone)]
-enum Selection {
+pub enum Selection {
     Line(LineSelection),
     Char(CharSelection),
 }
@@ -144,7 +147,7 @@ enum TooltipKind {
 const TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
 
 impl State {
-    pub fn new(config: ChatGPTConfiguration) -> Self {
+    pub fn new(config: ChatGPTConfiguration, current_focus: Arc<CurrentFocus>) -> Self {
         Self {
             cursor: CursorPosition::new(0, 0),
             selection: Default::default(),
@@ -155,7 +158,7 @@ impl State {
             scroll_view_dimentions: Default::default(),
             is_streaming: false,
             tooltip: None,
-            focused: false,
+            current_focus,
         }
     }
 }
@@ -500,7 +503,10 @@ const SCROLL_BAR_PADDING: u16 = 1;
 
 pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
     let state = store.state();
-    let navigation = navigation::ui(navigation::CurrentScreen::Chat);
+    let navigation = Block::default()
+        .title("Chat")
+        .borders(Borders::all())
+        .border_type(BorderType::Rounded);
 
     let width = navigation.inner(area).width - SCROLL_BAR_WIDTH - SCROLL_BAR_PADDING;
     let mut messages: Vec<(Paragraph, Rect)> = Default::default();
@@ -689,7 +695,7 @@ pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
         frame.render_widget(tooltip_widget, rect);
     }
 
-    let navigation_style = if state.focused {
+    let navigation_style = if *state.current_focus == CurrentFocus::Conversation {
         Style::new().green()
     } else {
         Style::default()
