@@ -1,6 +1,8 @@
+use anyhow::anyhow;
 use crossterm::event::DisableBracketedPaste;
 use crossterm::event::EnableBracketedPaste;
 use crossterm::event::Event;
+use dirs::home_dir;
 use futures::FutureExt;
 use futures::StreamExt;
 use tca::ActionSender;
@@ -16,8 +18,8 @@ mod uiutils;
 mod utils;
 
 use crate::app::navigation;
-use std::fs::File;
 use std::io::{self};
+use std::path::PathBuf;
 
 use anyhow::Context;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -33,15 +35,33 @@ use crate::app::entry::ui;
 use crate::app::entry::Action;
 use crate::app::entry::Feature;
 use crate::app::entry::State;
+use std::fs::{create_dir_all, File};
+
 use tca::ChangeObserver;
 
 fn configure_logger() -> anyhow::Result<()> {
     CombinedLogger::init(vec![WriteLogger::new(
         log::LevelFilter::Debug,
         simplelog::Config::default(),
-        File::create(".tgpt.latest.log").unwrap(),
+        create_log_file()?,
     )])
     .context("Failed to configure logging")
+}
+
+fn create_log_file() -> anyhow::Result<File> {
+    let home = home_dir().ok_or_else(|| anyhow!("Failed to find home directory"))?;
+    create_file_with_dirs(&home.join(".tgpt").join("latest.log"))
+}
+
+fn create_file_with_dirs(path: &PathBuf) -> anyhow::Result<File> {
+    // Create all directories in the specified path
+    let parent = std::path::Path::new(path)
+        .parent()
+        .ok_or_else(|| anyhow!("Failed to find configuration path"))?;
+    create_dir_all(parent)?;
+    // Create the file
+    let file = File::create(path)?;
+    Ok(file)
 }
 
 fn fixup_event(event: Event) -> Event {

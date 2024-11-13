@@ -11,7 +11,7 @@ use ratatui::{
 
 use crate::gpt;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct State<T>
 where
     T: for<'a> Into<ListItem<'a>>,
@@ -79,7 +79,7 @@ impl<T> tca::Reducer<State<T>, Action> for ListFeature
 where
     T: for<'a> Into<ListItem<'a>>,
     T: Clone,
-    T: Eq,
+    T: PartialEq,
 {
     fn reduce(state: &mut State<T>, action: Action) -> Effect<Action> {
         match action {
@@ -90,7 +90,9 @@ where
                             state
                                 .list_state
                                 .selected()
-                                .map(|selected| min(selected + 1, state.items.len() - 1))
+                                .map(|selected| {
+                                    min(selected + 1, state.items.len().saturating_sub(1))
+                                })
                                 .or(Some(0)),
                         );
 

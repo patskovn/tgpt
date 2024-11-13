@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::editor::Mode;
 use crossterm::event::{self, KeyModifiers};
@@ -8,9 +8,11 @@ use ratatui::{
     Frame,
 };
 use tca::{Effect, Reducer};
+use uuid::Uuid;
 
 use crate::{app::conversation, gpt::openai::ChatGPTConfiguration};
 
+use super::conversation_list::ConversationItem;
 use super::{conversation_input, conversation_list};
 
 #[derive(Debug, Copy, PartialEq, Clone, Default)]
@@ -21,17 +23,41 @@ pub enum CurrentFocus {
     ConversationList,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct SharedFocus {
+    value: Arc<RwLock<CurrentFocus>>,
+}
+
+impl PartialEq for SharedFocus {
+    fn eq(&self, other: &Self) -> bool {
+        self.value() == other.value()
+    }
+}
+
+impl SharedFocus {
+    pub fn value(&self) -> CurrentFocus {
+        *self.value.read().unwrap()
+    }
+
+    fn new(value: CurrentFocus) -> Self {
+        Self {
+            value: Arc::new(RwLock::new(value)),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct State<'a> {
     conversation_list: conversation_list::State,
     conversation: conversation::State,
     conversation_input: conversation_input::State<'a>,
-    current_focus: Arc<CurrentFocus>,
+    current_focus: SharedFocus,
 }
 
 impl Clone for State<'_> {
     fn clone(&self) -> Self {
-        let current_focus = Arc::new(*self.current_focus);
+        let focus = self.current_focus.value();
+        let current_focus = SharedFocus::new(focus);
         Self {
             conversation_list: conversation_list::State {
                 current_focus: current_focus.clone(),
@@ -51,11 +77,16 @@ impl Clone for State<'_> {
 }
 
 impl State<'_> {
-    pub fn new(config: ChatGPTConfiguration) -> Self {
-        let current_focus = Arc::new(CurrentFocus::default());
+    pub fn new(id: Uuid, config: ChatGPTConfiguration) -> Self {
+        let current_focus = SharedFocus::new(CurrentFocus::default());
         Self {
             conversation_list: conversation_list::State::new(current_focus.clone()),
-            conversation: conversation::State::new(config, current_focus.clone()),
+            conversation: conversation::State::new(
+                ConversationItem::new(id, "Fresh conversation".to_string(), 0),
+                config,
+                current_focus.clone(),
+                vec![],
+            ),
             conversation_input: conversation_input::State::new(current_focus.clone()),
             current_focus,
         }
@@ -92,7 +123,7 @@ impl Reducer<State<'_>, Action> for Feature {
                     kind: event::KeyEventKind::Press,
                     modifiers: KeyModifiers::NONE,
                     ..
-                }) => match *state.current_focus {
+                }) => match state.current_focus.value() {
                     CurrentFocus::TextArea
                         if state.conversation_input.textarea.editor.mode != Mode::Normal =>
                     {
@@ -101,19 +132,20 @@ impl Reducer<State<'_>, Action> for Feature {
                         ))
                     }
                     CurrentFocus::TextArea => {
-                        state.current_focus = CurrentFocus::ConversationList.into();
+                        *state.current_focus.value.write().unwrap() =
+                            CurrentFocus::ConversationList;
                         Effect::none()
                     }
                     CurrentFocus::ConversationList => {
-                        state.current_focus = CurrentFocus::Conversation.into();
+                        *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
                         Effect::none()
                     }
                     CurrentFocus::Conversation => {
-                        state.current_focus = CurrentFocus::TextArea.into();
+                        *state.current_focus.value.write().unwrap() = CurrentFocus::TextArea;
                         Effect::none()
                     }
                 },
-                _ => match *state.current_focus {
+                _ => match state.current_focus.value() {
                     CurrentFocus::Conversation => {
                         Effect::send(Action::Conversation(conversation::Action::Event(e)))
                     }
@@ -129,6 +161,28 @@ impl Reducer<State<'_>, Action> for Feature {
                 match delegated {
                     conversation_list::Delegated::Noop(e) => {
                         Effect::send(Action::Delegated(Delegated::Noop(e)))
+                    }
+                    conversation_list::Delegated::Select(history) => {
+                        state.conversation = conversation::State::new(
+                            history.0,
+                            state.conversation.config.clone(),
+                            state.current_focus.clone(),
+                            history.1.history,
+                        );
+                        Effect::none()
+                    }
+                    conversation_list::Delegated::NewConversation => {
+                        state.conversation = conversation::State::new(
+                            ConversationItem::new(
+                                Uuid::new_v4(),
+                                "Fresh conversation".to_string(),
+                                0,
+                            ),
+                            state.conversation.config.clone(),
+                            state.current_focus.clone(),
+                            vec![],
+                        );
+                        Effect::none()
                     }
                 }
             }
@@ -162,6 +216,9 @@ impl Reducer<State<'_>, Action> for Feature {
             Action::Conversation(conversation::Action::Delegated(delegated)) => match delegated {
                 conversation::Delegated::Noop(e) => {
                     Effect::send(Action::Delegated(Delegated::Noop(e)))
+                }
+                conversation::Delegated::ConversationTitleUpdated => {
+                    Effect::send(Action::ConversationList(conversation_list::Action::Reload))
                 }
             },
             Action::Conversation(action) => {

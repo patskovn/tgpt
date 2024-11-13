@@ -1,8 +1,11 @@
 use ratatui::crossterm::event::Event;
 use ratatui::{layout::Rect, widgets::Paragraph, Frame};
 use tca::Effect;
+use uuid::Uuid;
 
 use crate::{app::chat, app::navigation, gpt};
+
+use super::conversation_list;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub enum State<'a> {
@@ -58,12 +61,16 @@ impl tca::Reducer<State<'_>, Action> for Feature {
             Action::ReloadConfig => match gpt::openai::ChatGPTConfiguration::open() {
                 Some(config) => match state {
                     State::None => {
-                        *state = State::Chat(chat::State::new(config));
-                        Effect::none()
+                        *state = State::Chat(chat::State::new(Uuid::new_v4(), config));
+                        Effect::send(Action::Chat(chat::Action::ConversationList(
+                            conversation_list::Action::Reload,
+                        )))
                     }
                     State::Chat(ref mut chat) => {
                         chat.update_config(config);
-                        Effect::none()
+                        Effect::send(Action::Chat(chat::Action::ConversationList(
+                            conversation_list::Action::Reload,
+                        )))
                     }
                 },
                 None => Effect::none(),

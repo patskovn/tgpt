@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crossterm::event::Event;
 use ratatui::style::{Style, Stylize};
 use ratatui::{layout::Rect, Frame};
@@ -7,16 +5,16 @@ use tca::{Effect, Reducer};
 
 use crate::textfield;
 
-use super::chat::CurrentFocus;
+use super::chat::{CurrentFocus, SharedFocus};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
     pub textarea: textfield::State<'a>,
-    pub current_focus: Arc<CurrentFocus>,
+    pub current_focus: SharedFocus,
 }
 
 impl State<'_> {
-    pub fn new(current_focus: Arc<CurrentFocus>) -> Self {
+    pub fn new(current_focus: SharedFocus) -> Self {
         Self {
             textarea: Default::default(),
             current_focus,
@@ -65,7 +63,7 @@ impl Reducer<State<'_>, Action> for Feature {
 pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
     let state = store.state();
     let mut cloned_area = state.textarea.clone();
-    if *state.current_focus == CurrentFocus::TextArea {
+    if state.current_focus.value() == CurrentFocus::TextArea {
         if let Some(block) = cloned_area.textarea.block() {
             cloned_area
                 .textarea

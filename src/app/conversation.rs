@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::uiutils::moves;
@@ -37,6 +36,11 @@ use crate::{
 };
 
 use super::chat::CurrentFocus;
+use super::chat::SharedFocus;
+use super::conversation_list::load_metadata;
+use super::conversation_list::save_metadata;
+use super::conversation_list::ChatHistory;
+use super::conversation_list::ConversationItem;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct ScrollViewDiementions {
@@ -86,6 +90,7 @@ impl DisplayableMessage {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
+    pub id: ConversationItem,
     pub cursor: CursorPosition,
     pub selection: Option<Selection>,
     pub config: ChatGPTConfiguration,
@@ -95,7 +100,7 @@ pub struct State {
     pub scroll_view_dimentions: Option<ScrollViewDiementions>,
     pub is_streaming: bool,
     pub tooltip: Option<Tooltip>,
-    pub current_focus: Arc<CurrentFocus>,
+    pub current_focus: SharedFocus,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, new)]
@@ -146,13 +151,28 @@ enum TooltipKind {
 #[allow(dead_code)]
 const TEST: &str = "Here's a simple \"Hello, world!\" program in Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nTo run it, save the code in a file named `main.rs` and use the command `cargo run` or `rustc main.rs` followed by `./main`.";
 
+const CONVERSATION_SUMMARY: &str = "Read the following conversation history and create a brief, 2-4 word title that captures the main topic or purpose of the discussion. Ensure the title is clear, specific, and reflects the unique focus of the conversation. Avoid general terms, and keep it concise. Do not reply with any follow up questions. Just give me the answer based on what was already here.";
+
 impl State {
-    pub fn new(config: ChatGPTConfiguration, current_focus: Arc<CurrentFocus>) -> Self {
+    pub fn new(
+        id: ConversationItem,
+        config: ChatGPTConfiguration,
+        current_focus: SharedFocus,
+        history: Vec<ChatMessage>,
+    ) -> Self {
         Self {
+            id,
             cursor: CursorPosition::new(0, 0),
             selection: Default::default(),
             config,
-            history: vec![],
+            history: history
+                .into_iter()
+                .map(|msg| {
+                    let markdown = parse_markdown(msg.content.clone());
+                    let parahraphs = IntermediateMarkdownPassResult::into_paragraphs(markdown);
+                    DisplayableMessage::new(msg, parahraphs)
+                })
+                .collect(),
             partial: Default::default(),
             scroll_state: Default::default(),
             scroll_view_dimentions: Default::default(),
@@ -172,6 +192,7 @@ pub enum Action {
     ScrollOffsetChanged(Position),
     BeganStreaming,
     StoppedStreaming,
+    UpdateConversationTitle(String),
     Delegated(Delegated),
     CommitMessage(ChatMessage),
     UpdatePartial(Vec<ChatMessage>),
@@ -182,6 +203,7 @@ pub enum Action {
 #[derive(Debug)]
 pub enum Delegated {
     Noop(Event),
+    ConversationTitleUpdated,
 }
 
 pub struct Feature {}
@@ -310,7 +332,69 @@ impl tca::Reducer<State, Action> for Feature {
                 state.cursor =
                     CursorPosition::new(Feature::total_lines(state).saturating_sub(2), 0);
 
-                Effect::none()
+                let history_msgs_to_save: Vec<ChatMessage> = state
+                    .history
+                    .iter()
+                    .map(|msg| &msg.original)
+                    .cloned()
+                    .collect();
+                let conversation_info = state.id.clone();
+                let history_to_save = ChatHistory::new(history_msgs_to_save);
+                let api = Api::new(state.config.clone());
+
+                Effect::run(move |sender| async move {
+                    let mut metadata = load_metadata().unwrap_or_default();
+
+                    let (title, last_updated) = if history_to_save.history.len() > 4
+                        && (history_to_save.history.len() - conversation_info.titlte_updated_at
+                            >= 10
+                            || conversation_info.titlte_updated_at == 0)
+                    {
+                        let mut conversation = Conversation::new_with_history(
+                            api.client,
+                            history_to_save.history.clone(),
+                        );
+                        if let Ok(res) = conversation.send_message(CONVERSATION_SUMMARY).await {
+                            (
+                                res.message_choices[0].message.content.clone(),
+                                history_to_save.history.len(),
+                            )
+                        } else {
+                            (conversation_info.title, conversation_info.titlte_updated_at)
+                        }
+                    } else {
+                        (conversation_info.title, conversation_info.titlte_updated_at)
+                    };
+
+                    metadata.list.retain(|item| item.id != conversation_info.id);
+                    metadata.list.insert(
+                        0,
+                        ConversationItem::new(conversation_info.id, title.clone(), last_updated),
+                    );
+
+                    let home_dir = dirs::home_dir().expect("Failed to get home directory");
+                    let history_dir = home_dir.join(".tgpt").join("history");
+                    std::fs::create_dir_all(&history_dir)
+                        .expect("Failed to create history directory");
+                    let file_path = history_dir.join(conversation_info.id.to_string());
+
+                    let serialized = serde_json::to_string(&history_to_save)
+                        .expect("Failed to serialize history");
+
+                    std::fs::write(file_path, serialized).expect("Failed to write history to file");
+
+                    save_metadata(metadata).expect("Failed to write metadata to file");
+
+                    if history_to_save.history.len() == 1
+                        || last_updated != conversation_info.titlte_updated_at
+                    {
+                        sender.send(Action::UpdateConversationTitle(title));
+                    }
+                })
+            }
+            Action::UpdateConversationTitle(title) => {
+                state.id.title = title;
+                Effect::send(Action::Delegated(Delegated::ConversationTitleUpdated))
             }
             Action::UpdatePartial(msg) => {
                 state.partial = msg
@@ -331,11 +415,25 @@ impl tca::Reducer<State, Action> for Feature {
                     Feature::update_selection(state);
                     Effect::none()
                 }
+                moves::Delegated::UpMore => {
+                    state.cursor.row = state.cursor.row.saturating_sub(10);
+                    Feature::update_selection(state);
+                    Effect::none()
+                }
                 moves::Delegated::Down => {
                     state.cursor.row = state
                         .cursor
                         .row
                         .saturating_add(1)
+                        .min(Self::total_lines(state).saturating_sub(1));
+                    Feature::update_selection(state);
+                    Effect::none()
+                }
+                moves::Delegated::DownMore => {
+                    state.cursor.row = state
+                        .cursor
+                        .row
+                        .saturating_add(10)
                         .min(Self::total_lines(state).saturating_sub(1));
                     Feature::update_selection(state);
                     Effect::none()
@@ -504,7 +602,7 @@ const SCROLL_BAR_PADDING: u16 = 1;
 pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
     let state = store.state();
     let navigation = Block::default()
-        .title("Chat")
+        .title(state.id.title.clone())
         .borders(Borders::all())
         .border_type(BorderType::Rounded);
 
@@ -691,11 +789,11 @@ pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
                     .border_style(Style::default().green()),
             );
         let width = tooltip_widget.line_width() as u16 + 2 + 2; // + block padding + padding
-        let rect = Rect::new(chat_rect.width - width, 1, width, 3);
+        let rect = Rect::new(chat_rect.width.saturating_sub(width), 1, width, 3);
         frame.render_widget(tooltip_widget, rect);
     }
 
-    let navigation_style = if *state.current_focus == CurrentFocus::Conversation {
+    let navigation_style = if state.current_focus.value() == CurrentFocus::Conversation {
         Style::new().green()
     } else {
         Style::default()

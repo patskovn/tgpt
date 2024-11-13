@@ -408,8 +408,7 @@ mod test {
     #[test]
     fn line_composer_one_space() {
         let width = 120;
-        let (word_wrapper, _, _) =
-            run_composer(Composer::WordWrapper { trim: true }, " ", width as u16);
+        let (_, _, _) = run_composer(Composer::WordWrapper { trim: true }, " ", width as u16);
     }
 
     #[test]
