@@ -223,7 +223,7 @@ impl Reducer<State<'_>, Action> for Feature {
                         if message.is_empty() || state.conversation.is_streaming {
                             return Effect::none();
                         }
-                        state.conversation_input.textarea = crate::textfield::State::default();
+                        state.conversation_input.reset();
                         Effect::send(Action::Conversation(conversation::Action::NewMessage(
                             message,
                         )))

@@ -20,6 +20,10 @@ impl State<'_> {
             current_focus,
         }
     }
+
+    pub fn reset(&mut self) {
+        self.textarea = textfield::State::new_with_title("[3]".to_string());
+    }
 }
 
 #[derive(Debug)]
