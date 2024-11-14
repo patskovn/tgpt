@@ -31,8 +31,8 @@ impl TryFrom<KeyCode> for CurrentScreen {
     type Error = anyhow::Error;
     fn try_from(value: KeyCode) -> anyhow::Result<Self, Self::Error> {
         match value {
-            KeyCode::Char('1') => Ok(CurrentScreen::Chat),
-            KeyCode::Char('2') => Ok(CurrentScreen::Config),
+            KeyCode::Char('!') => Ok(CurrentScreen::Chat),
+            KeyCode::Char('@') => Ok(CurrentScreen::Config),
             _ => Err(anyhow!("Not a screen char")),
         }
     }
@@ -90,12 +90,24 @@ pub fn ui<'a>(current_screen: CurrentScreen) -> Block<'a> {
         .border_type(BorderType::Rounded)
 }
 
+pub fn ui_with_title<'a>(current_screen: CurrentScreen, title: Option<String>) -> Block<'a> {
+    let mut block = Block::default();
+    if let Some(title) = title {
+        block = block.title(Title::from(title).alignment(Alignment::Right));
+    }
+    block
+        .title(self::title(CurrentScreen::Chat, current_screen, 1))
+        .title(self::title(CurrentScreen::Config, current_screen, 2))
+        .borders(Borders::all())
+        .border_type(BorderType::Rounded)
+}
+
 fn title<'a>(screen: CurrentScreen, current_screen: CurrentScreen, index: u8) -> Title<'a> {
     let style = if screen == current_screen {
         Style::new().blue()
     } else {
         Style::default()
     };
-    Title::from(Line::from(format!("[{} {}]", index, screen)).style(style))
+    Title::from(Line::from(format!("[S-{} {}]", index, screen)).style(style))
         .alignment(Alignment::Left)
 }

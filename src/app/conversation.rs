@@ -602,7 +602,7 @@ const SCROLL_BAR_PADDING: u16 = 1;
 pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
     let state = store.state();
     let navigation = Block::default()
-        .title(state.id.title.clone())
+        .title(format!("[2] {}", state.id.title.clone()))
         .borders(Borders::all())
         .border_type(BorderType::Rounded);
 

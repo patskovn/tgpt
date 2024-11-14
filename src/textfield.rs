@@ -23,6 +23,7 @@ pub enum Delegated {
 pub struct State<'a> {
     pub editor: Vim,
     pub textarea: TextArea<'a>,
+    title: Option<String>,
     block: Option<Block<'a>>,
 }
 
@@ -53,6 +54,19 @@ impl<'a> State<'a> {
             editor: Vim::new(editor::Mode::Normal),
             textarea,
             block: None,
+            title: None,
+        }
+    }
+
+    pub fn new_with_title(title: String) -> Self {
+        let mut textarea = TextArea::default();
+        textarea.set_block(Mode::Normal.block(Some(title.clone())));
+        textarea.set_cursor_style(Mode::Normal.cursor_style());
+        Self {
+            editor: Vim::new(editor::Mode::Normal),
+            textarea,
+            block: None,
+            title: Some(title),
         }
     }
 }
@@ -60,12 +74,13 @@ impl<'a> State<'a> {
 impl<'a> Default for State<'a> {
     fn default() -> Self {
         let mut textarea = TextArea::default();
-        textarea.set_block(Mode::Normal.block());
+        textarea.set_block(Mode::Normal.block(None));
         textarea.set_cursor_style(Mode::Normal.cursor_style());
         Self {
             editor: Vim::new(editor::Mode::Normal),
             textarea,
             block: None,
+            title: None,
         }
     }
 }
@@ -90,9 +105,12 @@ impl tca::Reducer<State<'_>, Action> for Feature {
                     .transition(event.clone().into(), &mut state.textarea)
                 {
                     Transition::Mode(mode) if state.editor.mode != mode => {
-                        state
-                            .textarea
-                            .set_block(state.block.clone().unwrap_or(mode.block()));
+                        state.textarea.set_block(
+                            state
+                                .block
+                                .clone()
+                                .unwrap_or(mode.block(state.title.clone())),
+                        );
                         state.textarea.set_cursor_style(mode.cursor_style());
                         state.editor = Vim::new(mode);
 

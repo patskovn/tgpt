@@ -213,7 +213,8 @@ impl Reducer<State, Action> for Feature {
 }
 
 pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
-    let navigation = navigation::ui(navigation::CurrentScreen::Chat);
+    let navigation =
+        navigation::ui_with_title(navigation::CurrentScreen::Chat, Some("[1]".to_string()));
     let state = store.state();
     let navigation_style = if state.current_focus.value() == CurrentFocus::ConversationList {
         Style::new().green()

@@ -145,6 +145,27 @@ impl Reducer<State<'_>, Action> for Feature {
                         Effect::none()
                     }
                 },
+                Event::Key(KeyEvent {
+                    code: event::KeyCode::Char('1'),
+                    ..
+                }) => {
+                    *state.current_focus.value.write().unwrap() = CurrentFocus::ConversationList;
+                    Effect::none()
+                }
+                Event::Key(KeyEvent {
+                    code: event::KeyCode::Char('2'),
+                    ..
+                }) => {
+                    *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
+                    Effect::none()
+                }
+                Event::Key(KeyEvent {
+                    code: event::KeyCode::Char('3'),
+                    ..
+                }) => {
+                    *state.current_focus.value.write().unwrap() = CurrentFocus::TextArea;
+                    Effect::none()
+                }
                 _ => match state.current_focus.value() {
                     CurrentFocus::Conversation => {
                         Effect::send(Action::Conversation(conversation::Action::Event(e)))

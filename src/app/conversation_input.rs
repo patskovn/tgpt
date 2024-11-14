@@ -16,7 +16,7 @@ pub struct State<'a> {
 impl State<'_> {
     pub fn new(current_focus: SharedFocus) -> Self {
         Self {
-            textarea: Default::default(),
+            textarea: textfield::State::new_with_title("[3]".to_string()),
             current_focus,
         }
     }
