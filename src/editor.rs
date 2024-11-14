@@ -1,7 +1,6 @@
 use ratatui::prelude::Color;
 use ratatui::prelude::Modifier;
 use ratatui::prelude::Style;
-use ratatui::widgets::block::Title;
 use ratatui::widgets::Block;
 use ratatui::widgets::BorderType;
 use ratatui::widgets::Borders;
@@ -31,9 +30,7 @@ impl Mode {
         if let Some(title) = title {
             b = b.title(title);
         }
-        b.title(description).title(
-            Title::from(" [Tab] Toggle focus").position(ratatui::widgets::block::Position::Bottom),
-        )
+        b.title(description).title_bottom(" [Tab] Toggle focus")
     }
 
     pub fn cursor_style(&self) -> Style {

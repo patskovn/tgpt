@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use core::fmt;
 use ratatui::{
-    layout::Alignment,
     style::{Style, Stylize},
     text::Line,
     widgets::{block::Title, Block, BorderType, Borders},
@@ -93,7 +92,7 @@ pub fn ui<'a>(current_screen: CurrentScreen) -> Block<'a> {
 pub fn ui_with_title<'a>(current_screen: CurrentScreen, title: Option<String>) -> Block<'a> {
     let mut block = Block::default();
     if let Some(title) = title {
-        block = block.title(Title::from(title).alignment(Alignment::Right));
+        block = block.title(Line::from(title).right_aligned());
     }
     block
         .title(self::title(CurrentScreen::Chat, current_screen, 1))
@@ -108,6 +107,9 @@ fn title<'a>(screen: CurrentScreen, current_screen: CurrentScreen, index: u8) ->
     } else {
         Style::default()
     };
-    Title::from(Line::from(format!("[S-{} {}]", index, screen)).style(style))
-        .alignment(Alignment::Left)
+    Title::from(
+        Line::from(format!("[S-{} {}]", index, screen))
+            .style(style)
+            .left_aligned(),
+    )
 }

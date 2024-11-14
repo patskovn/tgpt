@@ -730,14 +730,13 @@ pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
             let text_area = Rect::new(1, prev_y, width - 1, height);
             prev_y += height;
             first_paragraph = false;
-            messages.push((paragraph, text_area))
+
+            messages.push((paragraph, text_area));
         }
     }
 
-    let mut scroll_view = ScrollView::new(Size::new(
-        width,
-        messages.last().map_or(0, |rect| rect.1.bottom()),
-    ));
+    let scroll_size = Size::new(width, messages.last().map_or(0, |rect| rect.1.bottom()));
+    let mut scroll_view = ScrollView::new(scroll_size);
     messages.into_iter().for_each(|(msg, rect)| {
         msg.render(rect, scroll_view.buf_mut());
     });

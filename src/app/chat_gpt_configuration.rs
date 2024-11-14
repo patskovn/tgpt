@@ -1,7 +1,7 @@
 use ratatui::crossterm::event::Event;
 use ratatui::{
     layout::{Constraint, Rect},
-    widgets::{block::Title, Block, Borders},
+    widgets::{Block, Borders},
     Frame,
 };
 use tca::Effect;
@@ -23,9 +23,7 @@ impl State<'_> {
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
             .title("Enter OpenAI API Key")
-            .title(
-                Title::from("[q] Hide field").position(ratatui::widgets::block::Position::Bottom),
-            );
+            .title_bottom("[q] Hide field");
 
         Self {
             api_key: single_line_input::State::new(block),
