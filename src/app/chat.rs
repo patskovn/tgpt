@@ -117,67 +117,26 @@ pub struct Feature {}
 impl Reducer<State<'_>, Action> for Feature {
     fn reduce(state: &mut State, action: Action) -> tca::Effect<Action> {
         match action {
-            Action::Event(e) => match e {
-                Event::Key(KeyEvent {
-                    code: event::KeyCode::Tab,
-                    kind: event::KeyEventKind::Press,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                }) => match state.current_focus.value() {
-                    CurrentFocus::TextArea
-                        if state.conversation_input.textarea.editor.mode != Mode::Normal =>
-                    {
-                        Effect::send(Action::ConversationInput(
-                            conversation_input::Action::Event(e),
-                        ))
-                    }
-                    CurrentFocus::TextArea => {
-                        *state.current_focus.value.write().unwrap() =
-                            CurrentFocus::ConversationList;
-                        Effect::none()
-                    }
-                    CurrentFocus::ConversationList => {
-                        *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
-                        Effect::none()
-                    }
-                    CurrentFocus::Conversation => {
-                        *state.current_focus.value.write().unwrap() = CurrentFocus::TextArea;
-                        Effect::none()
-                    }
-                },
-                Event::Key(KeyEvent {
-                    code: event::KeyCode::Char('1'),
-                    ..
-                }) => {
-                    *state.current_focus.value.write().unwrap() = CurrentFocus::ConversationList;
-                    Effect::none()
+            Action::Event(e) => match state.current_focus.value() {
+                CurrentFocus::Conversation => {
+                    Effect::send(Action::Conversation(conversation::Action::Event(e)))
                 }
-                Event::Key(KeyEvent {
-                    code: event::KeyCode::Char('2'),
-                    ..
-                }) => {
-                    *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
-                    Effect::none()
-                }
-                Event::Key(KeyEvent {
-                    code: event::KeyCode::Char('3'),
-                    ..
-                }) => {
-                    *state.current_focus.value.write().unwrap() = CurrentFocus::TextArea;
-                    Effect::none()
-                }
-                _ => match state.current_focus.value() {
-                    CurrentFocus::Conversation => {
-                        Effect::send(Action::Conversation(conversation::Action::Event(e)))
-                    }
-                    CurrentFocus::TextArea => Effect::send(Action::ConversationInput(
-                        conversation_input::Action::Event(e),
-                    )),
-                    CurrentFocus::ConversationList => Effect::send(Action::ConversationList(
-                        conversation_list::Action::Event(e),
-                    )),
-                },
+                CurrentFocus::TextArea => Effect::send(Action::ConversationInput(
+                    conversation_input::Action::Event(e),
+                )),
+                CurrentFocus::ConversationList => Effect::send(Action::ConversationList(
+                    conversation_list::Action::Event(e),
+                )),
             },
+            Action::ConversationList(conversation_list::Action::Delegated(
+                conversation_list::Delegated::Noop(e),
+            ))
+            | Action::Conversation(conversation::Action::Delegated(
+                conversation::Delegated::Noop(e),
+            ))
+            | Action::ConversationInput(conversation_input::Action::Delegated(
+                conversation_input::Delegated::Noop(e),
+            )) => try_toggle_focus(state, e),
             Action::ConversationList(conversation_list::Action::Delegated(delegated)) => {
                 match delegated {
                     conversation_list::Delegated::Noop(e) => {
@@ -248,6 +207,59 @@ impl Reducer<State<'_>, Action> for Feature {
             }
             Action::Delegated(_) => Effect::none(),
         }
+    }
+}
+
+fn try_toggle_focus(state: &mut State, event: Event) -> Effect<Action> {
+    match event {
+        Event::Key(KeyEvent {
+            code: event::KeyCode::Tab,
+            kind: event::KeyEventKind::Press,
+            modifiers: KeyModifiers::NONE,
+            ..
+        }) => match state.current_focus.value() {
+            CurrentFocus::TextArea
+                if state.conversation_input.textarea.editor.mode != Mode::Normal =>
+            {
+                Effect::send(Action::ConversationInput(
+                    conversation_input::Action::Event(event),
+                ))
+            }
+            CurrentFocus::TextArea => {
+                *state.current_focus.value.write().unwrap() = CurrentFocus::ConversationList;
+                Effect::none()
+            }
+            CurrentFocus::ConversationList => {
+                *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
+                Effect::none()
+            }
+            CurrentFocus::Conversation => {
+                *state.current_focus.value.write().unwrap() = CurrentFocus::TextArea;
+                Effect::none()
+            }
+        },
+        Event::Key(KeyEvent {
+            code: event::KeyCode::Char('1'),
+            ..
+        }) => {
+            *state.current_focus.value.write().unwrap() = CurrentFocus::ConversationList;
+            Effect::none()
+        }
+        Event::Key(KeyEvent {
+            code: event::KeyCode::Char('2'),
+            ..
+        }) => {
+            *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
+            Effect::none()
+        }
+        Event::Key(KeyEvent {
+            code: event::KeyCode::Char('3'),
+            ..
+        }) => {
+            *state.current_focus.value.write().unwrap() = CurrentFocus::TextArea;
+            Effect::none()
+        }
+        _ => Effect::send(Action::Delegated(Delegated::Noop(event))),
     }
 }
 
