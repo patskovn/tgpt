@@ -7,22 +7,12 @@ use std::{collections::HashSet, io::Write, path::PathBuf};
 use chatgpt::types::ChatMessage;
 use crossterm::event::Event;
 use derive_new::new;
-use ratatui::{
-    layout::Rect,
-    style::{Style, Stylize},
-    widgets::ListItem,
-    Frame,
-};
+use ratatui::{layout::Rect, widgets::ListItem, Frame};
 use serde::Serialize;
 use tca::{ActionSender, Effect, Reducer};
 use uuid::Uuid;
 
 use crate::list;
-
-use super::{
-    chat::{CurrentFocus, SharedFocus},
-    navigation,
-};
 
 #[derive(Serialize, Deserialize, Debug, new)]
 pub struct ChatHistory {
@@ -74,18 +64,8 @@ impl<'a> From<ConversationListEntry> for ListItem<'a> {
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct State {
-    pub current_focus: SharedFocus,
     pub conversations: list::State<ConversationListEntry>,
     pub _something: bool,
-}
-
-impl State {
-    pub fn new(current_focus: SharedFocus) -> Self {
-        Self {
-            current_focus,
-            ..Default::default()
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -213,14 +193,6 @@ impl Reducer<State, Action> for Feature {
 }
 
 pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
-    let navigation =
-        navigation::ui_with_title(navigation::CurrentScreen::Chat, Some("[1]".to_string()));
     let state = store.state();
-    let navigation_style = if state.current_focus.value() == CurrentFocus::ConversationList {
-        Style::new().green()
-    } else {
-        Style::default()
-    };
-    list::ui(frame, navigation.inner(area), &state.conversations);
-    frame.render_widget(navigation.border_style(navigation_style), area);
+    list::ui(frame, area, &state.conversations);
 }

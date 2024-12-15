@@ -13,14 +13,14 @@ use uuid::Uuid;
 use crate::{app::conversation, gpt::openai::ChatGPTConfiguration};
 
 use super::conversation_list::ConversationItem;
-use super::{conversation_input, conversation_list};
+use super::{chat_sidebar, conversation_input, conversation_list};
 
 #[derive(Debug, Copy, PartialEq, Clone, Default)]
 pub enum CurrentFocus {
     #[default]
     TextArea,
     Conversation,
-    ConversationList,
+    Sidebar,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -48,7 +48,7 @@ impl SharedFocus {
 
 #[derive(Debug, PartialEq)]
 pub struct State<'a> {
-    conversation_list: conversation_list::State,
+    sidebar: chat_sidebar::State<'a>,
     conversation: conversation::State,
     conversation_input: conversation_input::State<'a>,
     current_focus: SharedFocus,
@@ -59,9 +59,9 @@ impl Clone for State<'_> {
         let focus = self.current_focus.value();
         let current_focus = SharedFocus::new(focus);
         Self {
-            conversation_list: conversation_list::State {
+            sidebar: chat_sidebar::State {
                 current_focus: current_focus.clone(),
-                ..self.conversation_list.clone()
+                ..self.sidebar.clone()
             },
             conversation: conversation::State {
                 current_focus: current_focus.clone(),
@@ -80,7 +80,7 @@ impl State<'_> {
     pub fn new(id: Uuid, config: ChatGPTConfiguration) -> Self {
         let current_focus = SharedFocus::new(CurrentFocus::default());
         Self {
-            conversation_list: conversation_list::State::new(current_focus.clone()),
+            sidebar: chat_sidebar::State::new(current_focus.clone()),
             conversation: conversation::State::new(
                 ConversationItem::new(id, "Fresh conversation".to_string(), 0),
                 config,
@@ -100,7 +100,7 @@ impl State<'_> {
 #[derive(Debug)]
 pub enum Action {
     Event(Event),
-    ConversationList(conversation_list::Action),
+    Sidebar(chat_sidebar::Action),
     Conversation(conversation::Action),
     ConversationInput(conversation_input::Action),
     Delegated(Delegated),
@@ -124,51 +124,42 @@ impl Reducer<State<'_>, Action> for Feature {
                 CurrentFocus::TextArea => Effect::send(Action::ConversationInput(
                     conversation_input::Action::Event(e),
                 )),
-                CurrentFocus::ConversationList => Effect::send(Action::ConversationList(
-                    conversation_list::Action::Event(e),
-                )),
+                CurrentFocus::Sidebar => {
+                    Effect::send(Action::Sidebar(chat_sidebar::Action::Event(e)))
+                }
             },
-            Action::ConversationList(conversation_list::Action::Delegated(
-                conversation_list::Delegated::Noop(e),
-            ))
+            Action::Sidebar(chat_sidebar::Action::Delegated(chat_sidebar::Delegated::Noop(e)))
             | Action::Conversation(conversation::Action::Delegated(
                 conversation::Delegated::Noop(e),
             ))
             | Action::ConversationInput(conversation_input::Action::Delegated(
                 conversation_input::Delegated::Noop(e),
             )) => try_toggle_focus(state, e),
-            Action::ConversationList(conversation_list::Action::Delegated(delegated)) => {
-                match delegated {
-                    conversation_list::Delegated::Noop(e) => {
-                        Effect::send(Action::Delegated(Delegated::Noop(e)))
-                    }
-                    conversation_list::Delegated::Select(history) => {
-                        state.conversation = conversation::State::new(
-                            history.0,
-                            state.conversation.config.clone(),
-                            state.current_focus.clone(),
-                            history.1.history,
-                        );
-                        Effect::none()
-                    }
-                    conversation_list::Delegated::NewConversation => {
-                        state.conversation = conversation::State::new(
-                            ConversationItem::new(
-                                Uuid::new_v4(),
-                                "Fresh conversation".to_string(),
-                                0,
-                            ),
-                            state.conversation.config.clone(),
-                            state.current_focus.clone(),
-                            vec![],
-                        );
-                        Effect::none()
-                    }
+            Action::Sidebar(chat_sidebar::Action::Delegated(delegated)) => match delegated {
+                chat_sidebar::Delegated::Noop(e) => {
+                    Effect::send(Action::Delegated(Delegated::Noop(e)))
                 }
-            }
-            Action::ConversationList(action) => {
-                conversation_list::Feature::reduce(&mut state.conversation_list, action)
-                    .map(Action::ConversationList)
+                chat_sidebar::Delegated::Select(history) => {
+                    state.conversation = conversation::State::new(
+                        history.0,
+                        state.conversation.config.clone(),
+                        state.current_focus.clone(),
+                        history.1.history,
+                    );
+                    Effect::none()
+                }
+                chat_sidebar::Delegated::NewConversation => {
+                    state.conversation = conversation::State::new(
+                        ConversationItem::new(Uuid::new_v4(), "Fresh conversation".to_string(), 0),
+                        state.conversation.config.clone(),
+                        state.current_focus.clone(),
+                        vec![],
+                    );
+                    Effect::none()
+                }
+            },
+            Action::Sidebar(action) => {
+                chat_sidebar::Feature::reduce(&mut state.sidebar, action).map(Action::Sidebar)
             }
             Action::ConversationInput(conversation_input::Action::Delegated(delegated)) => {
                 match delegated {
@@ -197,9 +188,9 @@ impl Reducer<State<'_>, Action> for Feature {
                 conversation::Delegated::Noop(e) => {
                     Effect::send(Action::Delegated(Delegated::Noop(e)))
                 }
-                conversation::Delegated::ConversationTitleUpdated => {
-                    Effect::send(Action::ConversationList(conversation_list::Action::Reload))
-                }
+                conversation::Delegated::ConversationTitleUpdated => Effect::send(Action::Sidebar(
+                    chat_sidebar::Action::ConversationList(conversation_list::Action::Reload),
+                )),
             },
             Action::Conversation(action) => {
                 conversation::Feature::reduce(&mut state.conversation, action)
@@ -226,10 +217,10 @@ fn try_toggle_focus(state: &mut State, event: Event) -> Effect<Action> {
                 ))
             }
             CurrentFocus::TextArea => {
-                *state.current_focus.value.write().unwrap() = CurrentFocus::ConversationList;
+                *state.current_focus.value.write().unwrap() = CurrentFocus::Sidebar;
                 Effect::none()
             }
-            CurrentFocus::ConversationList => {
+            CurrentFocus::Sidebar => {
                 *state.current_focus.value.write().unwrap() = CurrentFocus::Conversation;
                 Effect::none()
             }
@@ -242,7 +233,7 @@ fn try_toggle_focus(state: &mut State, event: Event) -> Effect<Action> {
             code: event::KeyCode::Char('1'),
             ..
         }) => {
-            *state.current_focus.value.write().unwrap() = CurrentFocus::ConversationList;
+            *state.current_focus.value.write().unwrap() = CurrentFocus::Sidebar;
             Effect::none()
         }
         Event::Key(KeyEvent {
@@ -269,7 +260,7 @@ pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
         .constraints(vec![Constraint::Length(32), Constraint::Fill(1)])
         .split(area);
 
-    let conversation_list_rect = with_conversation_list[0];
+    let sidebar_rect = with_conversation_list[0];
     let layout = Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
         .constraints(vec![Constraint::Fill(1), Constraint::Max(10)])
@@ -277,10 +268,10 @@ pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
     let conversation_rect = layout[0];
     let conversation_input_rect = layout[1];
 
-    conversation_list::ui(
+    chat_sidebar::ui(
         frame,
-        conversation_list_rect,
-        store.scope(|s| &s.conversation_list, Action::ConversationList),
+        sidebar_rect,
+        store.scope(|s| &s.sidebar, Action::Sidebar),
     );
 
     conversation::ui(

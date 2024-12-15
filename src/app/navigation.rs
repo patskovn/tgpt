@@ -10,6 +10,8 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 
 use tca::Effect;
 
+use crate::uiutils::dark_mode::is_dark_mode;
+
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub enum CurrentScreen {
     #[default]
@@ -83,8 +85,8 @@ impl tca::Reducer<State, Action> for NavigationReducer {
 
 pub fn ui<'a>(current_screen: CurrentScreen) -> Block<'a> {
     Block::default()
-        .title(title(CurrentScreen::Chat, current_screen, 1))
-        .title(title(CurrentScreen::Config, current_screen, 2))
+        .title(title(CurrentScreen::Chat, current_screen))
+        .title(title(CurrentScreen::Config, current_screen))
         .borders(Borders::all())
         .border_type(BorderType::Rounded)
 }
@@ -92,23 +94,25 @@ pub fn ui<'a>(current_screen: CurrentScreen) -> Block<'a> {
 pub fn ui_with_title<'a>(current_screen: CurrentScreen, title: Option<String>) -> Block<'a> {
     let mut block = Block::default();
     if let Some(title) = title {
-        block = block.title(Line::from(title).right_aligned());
+        block = block.title(Line::from(title));
     }
     block
-        .title(self::title(CurrentScreen::Chat, current_screen, 1))
-        .title(self::title(CurrentScreen::Config, current_screen, 2))
+        .title(self::title(CurrentScreen::Chat, current_screen))
+        .title(self::title(CurrentScreen::Config, current_screen))
         .borders(Borders::all())
         .border_type(BorderType::Rounded)
 }
 
-fn title<'a>(screen: CurrentScreen, current_screen: CurrentScreen, index: u8) -> Title<'a> {
+fn title<'a>(screen: CurrentScreen, current_screen: CurrentScreen) -> Title<'a> {
     let style = if screen == current_screen {
         Style::new().blue()
+    } else if is_dark_mode() {
+        Style::new().white()
     } else {
-        Style::default()
+        Style::new().black()
     };
     Title::from(
-        Line::from(format!("[S-{} {}]", index, screen))
+        Line::from(format!("{}", screen))
             .style(style)
             .left_aligned(),
     )

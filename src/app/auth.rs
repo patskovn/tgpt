@@ -3,7 +3,7 @@ use ratatui::{layout::Rect, Frame};
 use tca::Effect;
 use tca::Reducer;
 
-use crate::{app::chat_gpt_configuration, app::navigation, gpt, list};
+use crate::{app::chat_gpt_configuration, gpt, list};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State<'a> {
@@ -107,15 +107,12 @@ impl Reducer<State<'_>, Action> for AuthReducer {
     }
 }
 
-pub fn ui(frame: &mut Frame, area: Rect, state: &State) {
-    let navigation = navigation::ui(navigation::CurrentScreen::Config);
-    let inner = navigation.inner(area);
-    list::ui(frame, inner, &state.providers);
+pub fn ui(frame: &mut Frame, area: Rect, store: tca::Store<State, Action>) {
+    let state = store.state();
+    list::ui(frame, area, &state.providers);
 
     match &state.configuration {
-        Some(Configuration::ChatGPT(state)) => chat_gpt_configuration::ui(frame, inner, state),
+        Some(Configuration::ChatGPT(state)) => chat_gpt_configuration::ui(frame, area, state),
         None => {}
     };
-
-    frame.render_widget(navigation, area);
 }

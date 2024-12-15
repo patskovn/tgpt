@@ -2,6 +2,7 @@ pub mod auth;
 pub mod chat;
 pub mod chat_gpt_configuration;
 pub mod chat_loader;
+pub mod chat_sidebar;
 pub mod conversation;
 pub mod conversation_input;
 pub mod conversation_list;

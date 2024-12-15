@@ -98,13 +98,10 @@ impl tca::Reducer<State<'_>, Action> for Feature {
 }
 
 pub fn ui(frame: &mut Frame, state: &State, store: Store<State, Action>) {
-    match state.navigation.current_screen {
-        CurrentScreen::Chat => chat_loader::ui(
-            frame,
-            frame.area(),
-            &state.chat,
-            store.scope(|s| &s.chat, Action::Chat),
-        ),
-        CurrentScreen::Config => auth::ui(frame, frame.area(), &state.auth),
-    }
+    chat_loader::ui(
+        frame,
+        frame.area(),
+        &state.chat,
+        store.scope(|s| &s.chat, Action::Chat),
+    )
 }
